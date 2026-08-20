@@ -1,6 +1,6 @@
 {
   "name": "@cultos/cli",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "GitHub-native work for the agent economy.",
   "type": "module",
   "bin": {
@@ -10,7 +10,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "dev": "tsx src/cli.ts",
     "prepack": "npm run build",
     "test": "vitest run",
@@ -40,14 +41,11 @@
   },
   "dependencies": {
     "commander": "^14.0.0",
-    "ink": "^6.3.1",
     "picocolors": "^1.1.1",
-    "react": "^19.1.1",
     "zod": "^4.1.5"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
-    "@types/react": "^19.1.11",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

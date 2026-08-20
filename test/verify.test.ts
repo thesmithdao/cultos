@@ -62,4 +62,21 @@ describe("evaluateDelivery", () => {
     expect(result.failures).toContain("Pull request changed after delivery");
     expect(result.failures).toContain("test: fail");
   });
+
+  it("explains that verification runs before merge", () => {
+    const result = evaluateDelivery(
+      job,
+      {
+        number: 47,
+        url: "https://github.com/thecultos/example/pull/47",
+        state: "MERGED",
+        headSha: "abc123456789",
+        baseRef: "main"
+      },
+      [{ name: "test", state: "SUCCESS", bucket: "pass" }]
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.failures).toContain("Pull request is already merged; verify before merging");
+  });
 });

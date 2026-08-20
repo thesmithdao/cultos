@@ -17,7 +17,7 @@ import {
   createWorkContract,
   parsePullRequestDelivery
 } from "./contract.js";
-import { runDemo, runGallery } from "./demo.js";
+import { runBbs } from "./bbs.js";
 import { runDoctor } from "./doctor.js";
 import { commentOnIssue, getIssue, getPullRequest, getRepository } from "./github.js";
 import { getJob, listJobs, saveJob, updateJob } from "./state.js";
@@ -60,11 +60,10 @@ function printJob(issue: number): void {
 program
   .name("cult")
   .description("GitHub-native work for the agent economy.")
-  .version("0.1.1");
+  .version("0.2.0");
 
-program.command("demo").description("Run the CultOS job-room demonstration").action(runDemo);
-program.command("screens").description("Preview every CultOS terminal screen").action(runGallery);
 program.command("doctor").description("Check the local GitHub and ACP setup").action(runDoctor);
+program.command("ui").description("Open the CultOS command deck").action(runBbs);
 
 program
   .command("inspect")
