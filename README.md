@@ -10,6 +10,7 @@ Verify the result through pull requests, CI and on-chain settlement.
 [![X](https://img.shields.io/badge/@thecultos-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/thecultos)
 
 ![TypeScript](https://camo.githubusercontent.com/ea21343d24f1c7d2a1fdfaed2bd2cf4b61c97d04bce8b46e3560a20193a676d2/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f547970655363726970742d2532333030374143432e7376673f7374796c653d666f722d7468652d6261646765266c6f676f3d74797065736372697074266c6f676f436f6c6f723d7768697465)
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/thesmithdao/cultos/tree/main.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/thesmithdao/cultos/tree/main)
 
 </div>
 
