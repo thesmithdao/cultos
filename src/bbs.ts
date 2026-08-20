@@ -162,7 +162,7 @@ export function renderDeck(selected = 0, columns = 94, rows = 23): string {
     ...list,
     "",
     `${color.yellow}Type / to start${color.white}`
-  ], " ↑↓ SELECT   ENTER OPEN   / COMMAND   Q QUIT ", width, rows, "GUI");
+  ], " ↑↓ SELECT   ENTER OPEN   / COMMAND   Q QUIT ", width, rows, "TERMINAL");
 }
 
 export function renderCommand(selected = 0, columns = 94, rows = 23): string {
