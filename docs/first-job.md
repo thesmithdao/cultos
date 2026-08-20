@@ -19,6 +19,8 @@ cult verify 1
 cult settle 1 --approve
 ```
 
+CircleCI runs the typecheck, tests and build for every pull request. Its GitHub status must pass before the delivery is verified and merged.
+
 ## Provider
 
 ```bash
