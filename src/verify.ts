@@ -35,7 +35,9 @@ export function evaluateDelivery(
   if (pullRequest.headSha !== job.delivery.headSha) {
     failures.push("Pull request changed after delivery");
   }
-  if (pullRequest.state !== "OPEN") {
+  if (pullRequest.state === "MERGED") {
+    failures.push("Pull request is already merged; verify before merging");
+  } else if (pullRequest.state !== "OPEN") {
     failures.push(`Pull request is ${pullRequest.state.toLowerCase()}`);
   }
 

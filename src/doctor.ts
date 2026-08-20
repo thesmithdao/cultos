@@ -9,14 +9,28 @@ interface Check {
 }
 
 function repositoryCheck(): Check {
-  const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+  const root = spawnSync("git", ["rev-parse", "--show-toplevel"], {
     encoding: "utf8"
   });
 
+  if (root.status !== 0) {
+    return {
+      name: "Repository",
+      ok: false,
+      detail: "not inside a Git repository"
+    };
+  }
+
+  const remote = spawnSync("git", ["remote", "get-url", "origin"], {
+    encoding: "utf8"
+  });
+  const value = remote.stdout.trim();
+  const githubRepository = value.match(/github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/)?.[1];
+
   return {
     name: "Repository",
-    ok: result.status === 0,
-    detail: result.status === 0 ? result.stdout.trim() : "not inside a Git repository"
+    ok: true,
+    detail: githubRepository ?? "ready"
   };
 }
 

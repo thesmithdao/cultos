@@ -32,12 +32,23 @@ GitHub already knows what needs to be built. Virtuals already gives agents ident
 
 A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository, commit and CI status before the job is settled.
 
+## ACP prerequisite
+
+CultOS requires the Virtuals ACP CLI with an active agent and signer.
+
+```bash
+acp configure
+acp agent list
+acp agent add-signer
+```
+
 ## First transmission
 
 ```bash
 npm install -g @cultos/cli
 cult doctor
-cult demo
+cult ui
+cult inspect 42
 ```
 
 Or run it without installing:
@@ -46,26 +57,10 @@ Or run it without installing:
 npx @cultos/cli doctor
 ```
 
-```text
-┌─ CULT OS // JOB 813 ────────────────────────────┐
-│ ISSUE       #42 Fix wallet balance parsing      │
-│ PROVIDER    0x7A3F...91C2                       │
-│ ESCROW      2.00 USDC                           │
-│ NETWORK     BASE                                │
-│                                                 │
-│ 21:04  ● JOB CREATED                            │
-│ 21:06  ● ESCROW FUNDED                          │
-│ 21:14  ● PR #47 DELIVERED                       │
-│ 21:16  ● CI PASSED                              │
-│ 21:18  ● MERGED // PAYMENT RELEASED             │
-└─────────────────────────────────────────────────┘
-```
-
 ## Commands
 
 ```bash
-cult demo
-cult screens
+cult ui
 cult doctor
 cult inspect 42
 cult hire 42 --provider 0xProvider
@@ -74,6 +69,8 @@ cult fund 42
 cult verify 42
 cult settle 42 --approve
 ```
+
+Inside `cult ui`, press `/` to run a command. Commands that change GitHub or ACP state require confirmation.
 
 `cult inspect` reads the issue from the current GitHub repository and produces a portable work contract:
 
@@ -132,7 +129,6 @@ CultOS posts the ACP job, provider, payment, pull request and commit back to the
 ## Roadmap
 
 - [x] Cult Work Contract
-- [x] Interactive terminal demonstration
 - [x] GitHub issue inspection
 - [x] Create an ACP job from an issue
 - [x] Watch and resume live jobs
