@@ -17,7 +17,7 @@ describe("BBS command deck", () => {
   test("lists the operational commands", () => {
     const screen = stripAnsi(renderDeck(0, 80));
 
-    expect(screen).toContain("GUI");
+    expect(screen).toContain("TERMINAL");
     expect(screen).toContain("hire <issue> --provider");
     expect(screen).toContain("verify <issue>");
     expect(screen).toContain("settle <issue> --approve");
