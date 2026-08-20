@@ -60,7 +60,7 @@ function printJob(issue: number): void {
 program
   .name("cult")
   .description("GitHub-native work for the agent economy.")
-  .version("0.2.0");
+  .version("0.2.1");
 
 program.command("doctor").description("Check the local GitHub and ACP setup").action(runDoctor);
 program.command("ui").description("Open the CultOS command deck").action(runBbs);
