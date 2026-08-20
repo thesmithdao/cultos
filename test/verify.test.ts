@@ -79,4 +79,37 @@ describe("evaluateDelivery", () => {
     expect(result.passed).toBe(false);
     expect(result.failures).toContain("Pull request is already merged; verify before merging");
   });
+
+  it("re-verifies a merged delivery for settlement", () => {
+    const result = evaluateDelivery(
+      job,
+      {
+        number: 47,
+        url: "https://github.com/thecultos/example/pull/47",
+        state: "MERGED",
+        headSha: "abc123456789",
+        baseRef: "main"
+      },
+      [{ name: "test", state: "SUCCESS", bucket: "pass" }],
+      "MERGED"
+    );
+
+    expect(result.passed).toBe(true);
+  });
+
+  it("requires CI checks", () => {
+    const result = evaluateDelivery(
+      job,
+      {
+        number: 47,
+        url: "https://github.com/thecultos/example/pull/47",
+        state: "OPEN",
+        headSha: "abc123456789",
+        baseRef: "main"
+      },
+      []
+    );
+
+    expect(result.failures).toContain("Pull request has no CI checks");
+  });
 });

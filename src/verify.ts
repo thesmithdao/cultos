@@ -18,7 +18,8 @@ export interface VerificationResult {
 export function evaluateDelivery(
   job: CultJob,
   pullRequest: GitHubPullRequest,
-  checks: GitHubCheck[]
+  checks: GitHubCheck[],
+  requiredState: "OPEN" | "MERGED" = "OPEN"
 ): VerificationResult {
   if (!job.delivery) {
     throw new Error("The provider has not submitted a pull-request delivery");
@@ -35,12 +36,15 @@ export function evaluateDelivery(
   if (pullRequest.headSha !== job.delivery.headSha) {
     failures.push("Pull request changed after delivery");
   }
-  if (pullRequest.state === "MERGED") {
+  if (pullRequest.state === "MERGED" && requiredState === "OPEN") {
     failures.push("Pull request is already merged; verify before merging");
-  } else if (pullRequest.state !== "OPEN") {
-    failures.push(`Pull request is ${pullRequest.state.toLowerCase()}`);
+  } else if (pullRequest.state !== requiredState) {
+    failures.push(`Pull request must be ${requiredState.toLowerCase()}`);
   }
 
+  if (checks.length === 0) {
+    failures.push("Pull request has no CI checks");
+  }
   const failedChecks = checks.filter((check) => !["pass", "skipping"].includes(check.bucket));
   for (const check of failedChecks) {
     failures.push(`${check.name}: ${check.bucket}`);
@@ -56,11 +60,14 @@ export function evaluateDelivery(
   };
 }
 
-export function verifyJob(job: CultJob): VerificationResult {
+export function verifyJob(
+  job: CultJob,
+  requiredState: "OPEN" | "MERGED" = "OPEN"
+): VerificationResult {
   if (!job.delivery) {
     throw new Error("The provider has not submitted a pull-request delivery");
   }
   const pullRequest = getPullRequest(job.delivery.url);
   const checks = getPullRequestChecks(job.delivery.url);
-  return evaluateDelivery(job, pullRequest, checks);
+  return evaluateDelivery(job, pullRequest, checks, requiredState);
 }
