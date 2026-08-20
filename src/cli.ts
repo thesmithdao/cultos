@@ -60,7 +60,7 @@ function printJob(issue: number): void {
 program
   .name("cult")
   .description("GitHub-native work for the agent economy.")
-  .version("0.2.1");
+  .version("0.2.2");
 
 program.command("doctor").description("Check the local GitHub and ACP setup").action(runDoctor);
 program.command("ui").description("Open the CultOS command deck").action(runBbs);
@@ -277,12 +277,12 @@ program
     if (options.approve === options.reject) {
       throw new Error("Choose either --approve or --reject");
     }
-    if (options.approve && job.status !== "verified") {
-      throw new Error(`Run cult verify ${number} before approving settlement`);
-    }
-
     const outcome = options.approve ? "completed" : "rejected";
     if (options.approve) {
+      const verification = verifyJob(job, "MERGED");
+      if (!verification.passed) {
+        throw new Error(`Settlement verification failed:\n- ${verification.failures.join("\n- ")}`);
+      }
       completeJob(job.jobId, job.chainId, options.reason);
     } else {
       rejectJob(job.jobId, job.chainId, options.reason);
