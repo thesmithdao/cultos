@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createJob, watchJob } from "../src/acp.js";
+import { createJob, fundJob, watchJob } from "../src/acp.js";
 
 let directory: string;
 let previousPath: string | undefined;
@@ -17,7 +17,10 @@ beforeEach(() => {
       "#!/bin/sh",
       "case \"$*\" in",
       "  *create-custom-job*) echo '{\"jobId\":813,\"chainId\":8453,\"protocol\":\"v2\"}' ; exit 0 ;;",
+      "  *job\\ watch*--timeout\\ 30*) echo '{\"status\":\"budget_set\",\"availableTools\":[\"fund\"]}' ; exit 0 ;;",
+      "  *job\\ watch*--timeout\\ 31*) echo 'Watching job 813...' ; exit 4 ;;",
       "  *job\\ watch*) echo '{\"status\":\"budget_set\",\"availableTools\":[\"fund\"],\"entry\":{\"event\":{\"amount\":\"1.00\"}}}' ; exit 0 ;;",
+      "  *client\\ fund*) echo '{\"error\":\"Insufficient balance\",\"code\":\"API_ERROR\",\"recovery\":\"Top up your wallet\"}' >&2 ; exit 1 ;;",
       "esac",
       "echo '{\"error\":\"unexpected command\"}' >&2",
       "exit 1"
@@ -59,5 +62,21 @@ describe("ACP adapter", () => {
     expect(job.status).toBe("budget_set");
     expect(job.budget).toBe("1.00");
     expect(job.availableTools).toEqual(["fund"]);
+  });
+
+  it("passes an optional watch timeout", () => {
+    const job = watchJob("813", 30);
+
+    expect(job.status).toBe("budget_set");
+  });
+
+  it("reports ACP watch timeouts clearly", () => {
+    expect(() => watchJob("813", 31)).toThrow("No ACP update within 31 seconds");
+  });
+
+  it("formats structured ACP errors", () => {
+    expect(() => fundJob("813", 8453, "1.00")).toThrow(
+      "Insufficient balance. Top up your wallet"
+    );
   });
 });

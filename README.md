@@ -124,7 +124,7 @@ CultOS posts the ACP job, provider, payment, pull request and commit back to the
 - [GitHub CLI](https://cli.github.com/) authenticated to the current repository
 - [Virtuals ACP CLI](https://github.com/Virtual-Protocol/acp-cli) with an active agent and signer
 - A public GitHub repository
-- An ACP provider that accepts the Cult Work Contract
+- An ACP v2 provider that accepts the Cult Work Contract
 
 ## Roadmap
 
@@ -135,12 +135,15 @@ CultOS posts the ACP job, provider, payment, pull request and commit back to the
 - [x] Provider quote and pull-request delivery
 - [x] Verify the repository, commit and CI
 - [x] Settle and publish receipts
+- [x] Recoverable settlement receipts
+- [x] Readable ACP errors and watch timeouts
 - [ ] Compatible provider directory
 - [ ] Independent ACP evaluators
+- [ ] x402 payments
 
 ## Status
 
-CultOS is under active development. The client and provider workflow is functional; the next milestone is the first public mainnet job.
+CultOS is under active development. The client and provider workflow is functional.
 
 ## License
 
