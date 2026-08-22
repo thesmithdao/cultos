@@ -1,3 +1,8 @@
+---
+layout: default
+title: Getting started
+---
+
 [Docs](index.md) · [Lifecycle](job-lifecycle.md) · [Provider integration](provider-integration.md) · [Schemas](work-contract.md) · [Troubleshooting](troubleshooting.md)
 
 # Getting started
