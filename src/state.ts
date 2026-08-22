@@ -17,6 +17,8 @@ export interface CultJob {
   status: string;
   budget?: string;
   delivery?: PullRequestDelivery;
+  settledByCultos?: "completed" | "rejected";
+  receiptPostedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +56,8 @@ const jobSchema = z.object({
   status: z.string().min(1),
   budget: z.string().optional(),
   delivery: deliverySchema.optional(),
+  settledByCultos: z.enum(["completed", "rejected"]).optional(),
+  receiptPostedAt: z.string().min(1).optional(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1)
 });

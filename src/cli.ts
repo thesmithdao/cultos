@@ -41,6 +41,31 @@ function chainId(value: string): number {
   return parsed;
 }
 
+function positiveInteger(value: string, name: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+  return parsed;
+}
+
+function settlementReceipt(job: ReturnType<typeof getJob>, outcome: "completed" | "rejected"): string {
+  return [
+    `<!-- cultos-job:${job.chainId}:${job.jobId} -->`,
+    "### CultOS receipt",
+    "",
+    "| | |",
+    "|---|---|",
+    `| ACP job | \`${job.jobId}\` |`,
+    `| Provider | \`${job.provider}\` |`,
+    `| Result | **${outcome}** |`,
+    ...(job.budget ? [`| Settlement | ${job.budget} USDC |`] : []),
+    ...(job.delivery
+      ? [`| Delivery | ${job.delivery.url} |`, `| Commit | \`${job.delivery.headSha}\` |`]
+      : [])
+  ].join("\n");
+}
+
 function printJob(issue: number): void {
   const job = getJob(issue);
   console.log(pc.bold(`\nCULT OS // ISSUE #${job.issueNumber}\n`));
@@ -60,7 +85,7 @@ function printJob(issue: number): void {
 program
   .name("cult")
   .description("GitHub-native work for the agent economy.")
-  .version("0.2.2");
+  .version("0.2.3");
 
 program.command("doctor").description("Check the local GitHub and ACP setup").action(runDoctor);
 program.command("ui").description("Open the CultOS command deck").action(runBbs);
@@ -159,12 +184,16 @@ program
 program
   .command("watch")
   .argument("<issue>", "GitHub issue number")
+  .option("--timeout <seconds>", "Stop waiting after this many seconds")
   .description("Wait until an ACP job needs attention")
-  .action((value: string) => {
+  .action((value: string, options: { timeout?: string }) => {
     const number = issueNumber(value);
     const job = getJob(number);
     console.log(pc.dim(`Watching ACP job ${job.jobId}...`));
-    const watched = watchJob(job.jobId);
+    const watched = watchJob(
+      job.jobId,
+      options.timeout ? positiveInteger(options.timeout, "timeout") : undefined
+    );
     const update: Parameters<typeof updateJob>[1] = { status: watched.status };
 
     if (watched.budget) {
@@ -192,6 +221,9 @@ program
   .action((value: string) => {
     const number = issueNumber(value);
     const job = getJob(number);
+    if (["funded", "submitted", "verified", "completed", "rejected"].includes(job.status)) {
+      throw new Error(`ACP job ${job.jobId} is already ${job.status}`);
+    }
     if (!job.budget) {
       throw new Error(`No provider quote found. Run cult watch ${number} first.`);
     }
@@ -278,32 +310,30 @@ program
       throw new Error("Choose either --approve or --reject");
     }
     const outcome = options.approve ? "completed" : "rejected";
-    if (options.approve) {
-      const verification = verifyJob(job, "MERGED");
-      if (!verification.passed) {
-        throw new Error(`Settlement verification failed:\n- ${verification.failures.join("\n- ")}`);
-      }
-      completeJob(job.jobId, job.chainId, options.reason);
-    } else {
-      rejectJob(job.jobId, job.chainId, options.reason);
+    const terminalStatus = job.status === "completed" || job.status === "rejected";
+    const retryingReceipt = job.settledByCultos === outcome && !job.receiptPostedAt;
+    if (terminalStatus && !retryingReceipt) {
+      throw new Error(`ACP job ${job.jobId} is already ${job.status}`);
     }
-    updateJob(number, { status: outcome });
+    if (job.receiptPostedAt) {
+      throw new Error(`Receipt already posted for ACP job ${job.jobId}`);
+    }
 
-    const receipt = [
-      `<!-- cultos-job:${job.chainId}:${job.jobId} -->`,
-      "### CultOS receipt",
-      "",
-      "| | |",
-      "|---|---|",
-      `| ACP job | \`${job.jobId}\` |`,
-      `| Provider | \`${job.provider}\` |`,
-      `| Result | **${outcome}** |`,
-      ...(job.budget ? [`| Settlement | ${job.budget} USDC |`] : []),
-      ...(job.delivery
-        ? [`| Delivery | ${job.delivery.url} |`, `| Commit | \`${job.delivery.headSha}\` |`]
-        : [])
-    ].join("\n");
-    commentOnIssue(number, receipt);
+    if (!retryingReceipt) {
+      if (options.approve) {
+        const verification = verifyJob(job, "MERGED");
+        if (!verification.passed) {
+          throw new Error(`Settlement verification failed:\n- ${verification.failures.join("\n- ")}`);
+        }
+        completeJob(job.jobId, job.chainId, options.reason);
+      } else {
+        rejectJob(job.jobId, job.chainId, options.reason);
+      }
+      updateJob(number, { status: outcome, settledByCultos: outcome });
+    }
+
+    commentOnIssue(number, settlementReceipt(job, outcome));
+    updateJob(number, { receiptPostedAt: new Date().toISOString() });
     console.log(pc.green(`\nACP job ${job.jobId} ${outcome}. Receipt posted to issue #${number}.\n`));
   });
 

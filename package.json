@@ -1,6 +1,6 @@
 {
   "name": "@cultos/cli",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "GitHub-native work for the agent economy.",
   "type": "module",
   "bin": {

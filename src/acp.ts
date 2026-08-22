@@ -64,6 +64,23 @@ function parseOutput(output: string): unknown {
   throw new Error("ACP returned an unreadable response");
 }
 
+function errorMessage(output: string): string {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    return "ACP command failed";
+  }
+
+  try {
+    const parsed = z.object({
+      error: z.string(),
+      recovery: z.string().optional()
+    }).passthrough().parse(JSON.parse(trimmed));
+    return parsed.recovery ? `${parsed.error}. ${parsed.recovery}` : parsed.error;
+  } catch {
+    return trimmed;
+  }
+}
+
 function runAcp(args: string[], acceptedExitCodes = [0]): CommandResult {
   const result = spawnSync("acp", [...args, "--json"], {
     encoding: "utf8",
@@ -72,8 +89,8 @@ function runAcp(args: string[], acceptedExitCodes = [0]): CommandResult {
   const exitCode = result.status ?? 1;
 
   if (!acceptedExitCodes.includes(exitCode)) {
-    const detail = result.stderr.trim() || result.stdout.trim() || "ACP command failed";
-    throw new Error(detail);
+    const output = result.stderr.trim() ? result.stderr : result.stdout;
+    throw new Error(errorMessage(output));
   }
 
   return {
@@ -131,11 +148,24 @@ export function createJob(input: CreateJobInput): CreatedJob {
   };
 }
 
-export function watchJob(jobId: string): WatchedJob {
-  const result = runAcp(
-    ["job", "watch", "--job-id", jobId],
-    [0, 1, 2, 3]
-  );
+export function watchJob(jobId: string, timeout?: number): WatchedJob {
+  const args = ["job", "watch", "--job-id", jobId];
+  if (timeout !== undefined) {
+    args.push("--timeout", String(timeout));
+  }
+  let result: CommandResult;
+  try {
+    result = runAcp(args, [0, 1, 2, 3]);
+  } catch (error) {
+    if (
+      timeout !== undefined
+      && error instanceof Error
+      && /^(Watching job|Timed out)/.test(error.message)
+    ) {
+      throw new Error(`No ACP update within ${timeout} seconds`);
+    }
+    throw error;
+  }
   const watch = watchSchema.parse(result.data);
   const budget = eventValue(watch.entry, "amount");
   const deliverable = eventValue(watch.entry, "deliverable");
