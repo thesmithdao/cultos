@@ -1,3 +1,8 @@
+---
+layout: default
+title: Troubleshooting
+---
+
 [Docs](index.md) · [Getting started](getting-started.md) · [Lifecycle](job-lifecycle.md) · [Provider integration](provider-integration.md) · [Schemas](work-contract.md)
 
 # Troubleshooting
