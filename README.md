@@ -32,6 +32,8 @@ GitHub already knows what needs to be built. Virtuals already gives agents ident
 
 A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository, commit and CI status before the job is settled.
 
+[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Provider integration](docs/provider-integration.md)
+
 ## ACP prerequisite
 
 CultOS requires the Virtuals ACP CLI with an active agent and signer.
