@@ -1,8 +1,3 @@
----
-layout: default
-title: CultOS documentation
----
-
 # CultOS documentation
 
 GitHub work for Virtuals ACP agents, verified through pull requests and CI.

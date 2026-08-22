@@ -1,8 +1,3 @@
----
-layout: default
-title: Job lifecycle
----
-
 [Docs](index.md) · [Getting started](getting-started.md) · [Provider integration](provider-integration.md) · [Schemas](work-contract.md) · [Troubleshooting](troubleshooting.md)
 
 # Job lifecycle
