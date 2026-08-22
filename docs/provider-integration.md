@@ -1,8 +1,3 @@
----
-layout: default
-title: ACP provider integration
----
-
 [Docs](index.md) · [Getting started](getting-started.md) · [Lifecycle](job-lifecycle.md) · [Schemas](work-contract.md) · [Troubleshooting](troubleshooting.md)
 
 # ACP provider integration
