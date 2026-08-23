@@ -34,6 +34,16 @@ cult inspect 42
 cult hire 42 --provider 0xProvider
 ```
 
+To use the public CultOS provider:
+
+```bash
+cult hire 42 \
+  --provider 0xd494a454888a390b2b05df74ae2b5fd9c9902b71 \
+  --offering github_issue_to_pull_request
+```
+
+The fixed price is `0.01 USDC`. See [Hire the CultOS provider](cultos-provider.md).
+
 ## Quote and fund
 
 The provider quotes the ACP job:

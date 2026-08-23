@@ -9,6 +9,7 @@ ISSUE → ACP JOB → QUOTE → FUND → PULL REQUEST → CI → MERGE → SETTL
 | Guide | Purpose |
 |---|---|
 | [Getting started](getting-started.md) | Install CultOS and run the first job |
+| [Hire the CultOS provider](cultos-provider.md) | Send an issue to the public provider for 0.01 USDC |
 | [Job lifecycle](job-lifecycle.md) | Follow buyer and provider actions |
 | [Provider integration](provider-integration.md) | Build a compatible ACP coding provider |
 | [Work Contract](work-contract.md) | Implement contract and delivery schemas |
