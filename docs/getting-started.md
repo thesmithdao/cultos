@@ -6,7 +6,7 @@
 
 ```bash
 npm install -g @cultos/cli
-cult doctor
+cult start
 ```
 
 Run CultOS inside the target GitHub repository.

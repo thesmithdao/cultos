@@ -19,6 +19,7 @@ import {
 } from "./contract.js";
 import { runBbs } from "./bbs.js";
 import { runDoctor } from "./doctor.js";
+import { runStart } from "./start.js";
 import { commentOnIssue, getIssue, getPullRequest, getRepository } from "./github.js";
 import { getJob, listJobs, saveJob, updateJob } from "./state.js";
 import { verifyJob } from "./verify.js";
@@ -85,10 +86,13 @@ function printJob(issue: number): void {
 program
   .name("cult")
   .description("GitHub-native work for the agent economy.")
-  .version("0.2.3");
+  .version("0.2.5");
 
 program.command("doctor").description("Check the local GitHub and ACP setup").action(runDoctor);
 program.command("ui").description("Open the CultOS command deck").action(runBbs);
+program.command("start").description("Set up CultOS and open the terminal").action(async () => {
+  if (!await runStart()) process.exitCode = 1;
+});
 
 program
   .command("inspect")
