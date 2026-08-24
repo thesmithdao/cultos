@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 
 const ESC = "\u001b[";
 
@@ -43,7 +43,10 @@ function commandAt(index: number): DeckCommand {
 }
 
 function plain(value: string): string {
-  return value.replace(/\u001b\[[0-9;]*m/g, "");
+  return value
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
 }
 
 function fit(value: string, width: number): string {
@@ -196,6 +199,36 @@ export function renderPrompt(value = "", error = "", columns = 94, rows = 23): s
   ], " ENTER RUN   ESC CANCEL   BACKSPACE EDIT ", width, rows, "COMMAND");
 }
 
+export function renderRunning(
+  command: string,
+  output = "",
+  elapsedSeconds = 0,
+  columns = 94,
+  rows = 23,
+  cancelling = false
+): string {
+  const width = Math.max(72, Math.min(columns, 100));
+  const contentHeight = Math.max(1, rows - 5);
+  const status = cancelling
+    ? "CANCELLING"
+    : command.trim().startsWith("watch ")
+      ? "WATCHING"
+      : "RUNNING";
+  const fixedLines = [
+    `${color.yellow}${status}${color.white} · ${elapsedSeconds}s`,
+    "",
+    `cult ${command}`,
+    ""
+  ];
+  const outputLines = wrap(output || "Waiting for output...", width - 4);
+  const available = Math.max(1, contentHeight - fixedLines.length);
+
+  return frame([
+    ...fixedLines,
+    ...outputLines.slice(-available)
+  ], " ESC CANCEL   Q QUIT ", width, rows, status);
+}
+
 export function renderConfirmation(value: string, columns = 94, rows = 23): string {
   const width = Math.max(72, Math.min(columns, 100));
   return frame([
@@ -208,12 +241,37 @@ export function renderConfirmation(value: string, columns = 94, rows = 23): stri
   ], " Y CONFIRM   N CANCEL   ESC COMMAND MODE ", width, rows, "CONFIRM");
 }
 
-export function renderResult(value: string, exitCode: number, columns = 94, rows = 23): string {
-  const width = Math.max(72, Math.min(columns, 100));
-  return frame([
+function resultLines(value: string, exitCode: number, width: number): string[] {
+  return [
     ...(exitCode === 0 ? [] : [`${color.yellow}FAILED · EXIT ${exitCode}${color.white}`, ""]),
     ...wrap(value || "Command completed without output.", width - 4)
-  ], " ESC DECK   / NEW COMMAND   Q QUIT ", width, rows, "RESULT");
+  ];
+}
+
+function resultScrollLimit(value: string, exitCode: number, width: number, height: number): number {
+  return Math.max(0, resultLines(value, exitCode, width).length - Math.max(1, height - 5));
+}
+
+export function renderResult(
+  value: string,
+  exitCode: number,
+  columns = 94,
+  rows = 23,
+  scroll = 0
+): string {
+  const width = Math.max(72, Math.min(columns, 100));
+  const limit = resultScrollLimit(value, exitCode, width, rows);
+  const offset = Math.max(0, Math.min(scroll, limit));
+  const footer = limit > 0
+    ? " ↑↓ SCROLL   ESC DECK   / NEW COMMAND   Q QUIT "
+    : " ESC DECK   / NEW COMMAND   Q QUIT ";
+  return frame(
+    resultLines(value, exitCode, width).slice(offset),
+    footer,
+    width,
+    rows,
+    "RESULT"
+  );
 }
 
 export function runBbs(): void {
@@ -222,38 +280,133 @@ export function runBbs(): void {
   }
 
   let selected = 0;
-  let mode: "deck" | "detail" | "prompt" | "confirm" | "result" = "deck";
+  let mode: "deck" | "detail" | "prompt" | "confirm" | "running" | "result" = "deck";
   let commandLine = "";
   let promptError = "";
   let result = "";
   let exitCode = 0;
+  let resultScroll = 0;
+  let activeChild: ChildProcess | undefined;
+  let runningSince = 0;
+  let runningTimer: NodeJS.Timeout | undefined;
+  let cancelling = false;
+  let closed = false;
+
+  const dimensions = (): { columns: number; rows: number } => ({
+    columns: Math.max(1, (process.stdout.columns ?? 95) - 1),
+    rows: Math.max(1, (process.stdout.rows ?? 24) - 1)
+  });
 
   const render = (): void => {
-    const columns = Math.max(60, (process.stdout.columns ?? 95) - 1);
-    const rows = Math.max(12, (process.stdout.rows ?? 24) - 1);
+    if (closed) return;
+    const { columns, rows } = dimensions();
+    if (columns < 72 || rows < 12) {
+      const message = "CultOS needs a 72 × 12 terminal.";
+      process.stdout.write(`${ESC}H${ESC}2J${message.slice(0, columns)}`);
+      return;
+    }
     const screen = mode === "detail"
       ? renderCommand(selected, columns, rows)
       : mode === "prompt"
         ? renderPrompt(commandLine, promptError, columns, rows)
         : mode === "confirm"
           ? renderConfirmation(commandLine, columns, rows)
+          : mode === "running"
+            ? renderRunning(
+              commandLine,
+              result,
+              Math.floor((Date.now() - runningSince) / 1000),
+              columns,
+              rows,
+              cancelling
+            )
           : mode === "result"
-            ? renderResult(result, exitCode, columns, rows)
+            ? renderResult(result, exitCode, columns, rows, resultScroll)
             : renderDeck(selected, columns, rows);
     process.stdout.write(`${ESC}H${ESC}2J${screen}`);
   };
 
+  const appendResult = (value: string): void => {
+    result = `${result}${value}`.slice(-1024 * 1024);
+    render();
+  };
+
+  const stopRunningTimer = (): void => {
+    if (runningTimer) clearInterval(runningTimer);
+    runningTimer = undefined;
+  };
+
+  const cancelActiveCommand = (): void => {
+    if (!activeChild || cancelling) return;
+    cancelling = true;
+    render();
+    const pid = activeChild.pid;
+    if (pid && process.platform !== "win32") {
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        activeChild.kill("SIGTERM");
+      }
+    } else {
+      activeChild.kill("SIGTERM");
+    }
+  };
+
   const execute = (): void => {
-    const args = parseCommandLine(commandLine);
-    const execution = spawnSync(process.execPath, [process.argv[1]!, ...args], {
+    let args: string[];
+    try {
+      args = parseCommandLine(commandLine);
+    } catch (error) {
+      promptError = error instanceof Error ? error.message : String(error);
+      mode = "prompt";
+      render();
+      return;
+    }
+
+    mode = "running";
+    result = "";
+    resultScroll = 0;
+    exitCode = 0;
+    cancelling = false;
+    runningSince = Date.now();
+    render();
+
+    const execution = spawn(process.execPath, [process.argv[1]!, ...args], {
       cwd: process.cwd(),
-      encoding: "utf8",
       env: process.env,
-      maxBuffer: 10 * 1024 * 1024
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"]
     });
-    exitCode = execution.status ?? 1;
-    result = [execution.stdout, execution.stderr].filter(Boolean).join("\n").trim();
-    mode = "result";
+    let executionFinished = false;
+    activeChild = execution;
+    execution.stdout?.setEncoding("utf8");
+    execution.stderr?.setEncoding("utf8");
+    execution.stdout?.on("data", appendResult);
+    execution.stderr?.on("data", appendResult);
+    execution.once("error", (error) => {
+      if (executionFinished) return;
+      executionFinished = true;
+      stopRunningTimer();
+      activeChild = undefined;
+      exitCode = 1;
+      result = `${result}${result ? "\n" : ""}${error.message}`.trim();
+      mode = "result";
+      render();
+    });
+    execution.once("close", (code, signal) => {
+      if (executionFinished) return;
+      executionFinished = true;
+      stopRunningTimer();
+      activeChild = undefined;
+      exitCode = cancelling ? 130 : (code ?? (signal ? 1 : 0));
+      if (cancelling) result = `${result}${result ? "\n" : ""}Command cancelled.`;
+      result = result.trim();
+      resultScroll = 0;
+      mode = "result";
+      render();
+    });
+    runningTimer = setInterval(render, 1000);
+    runningTimer.unref();
   };
 
   const submit = (): void => {
@@ -268,25 +421,45 @@ export function runBbs(): void {
     }
   };
 
-  const quit = (): void => {
-    process.stdout.off("resize", render);
-    process.stdin.setRawMode(false);
-    process.stdin.pause();
+  const restoreTerminal = (): void => {
     process.stdout.write(`${color.reset}${ESC}?25h${ESC}?1049l`);
   };
 
-  process.stdin.setRawMode(true);
-  process.stdin.resume();
-  process.stdout.on("resize", render);
-  process.stdin.on("data", (input: Buffer) => {
+  const quit = (): void => {
+    if (closed) return;
+    closed = true;
+    cancelActiveCommand();
+    stopRunningTimer();
+    process.stdout.off("resize", render);
+    process.stdin.off("data", onInput);
+    process.off("SIGTERM", onSignal);
+    process.off("SIGHUP", onSignal);
+    process.off("exit", restoreTerminal);
+    if (process.stdin.isRaw) process.stdin.setRawMode(false);
+    process.stdin.pause();
+    restoreTerminal();
+  };
+
+  const onSignal = (): void => {
+    quit();
+    process.exit(1);
+  };
+
+  const onInput = (input: Buffer): void => {
     const value = input.toString();
-    if (value.length > 1 && value !== "\u001b[A" && value !== "\u001b[B") {
+    const navigationKeys = new Set(["\u001b[A", "\u001b[B", "\u001b[5~", "\u001b[6~"]);
+    if (value.length > 1 && !navigationKeys.has(value)) {
       for (const character of value) {
         process.stdin.emit("data", Buffer.from(character));
       }
       return;
     }
     const key = value;
+    if (mode === "running") {
+      if (key === "\u0003" || key === "\u001b") cancelActiveCommand();
+      else if (key === "q") quit();
+      return;
+    }
     if (key === "\u0003" || (key === "q" && mode !== "prompt")) {
       quit();
       return;
@@ -322,6 +495,21 @@ export function runBbs(): void {
       mode = "prompt";
     } else if (mode === "result" && key === "\u001b") {
       mode = "deck";
+    } else if (mode === "result" && (key === "\u001b[A" || key === "k")) {
+      resultScroll = Math.max(0, resultScroll - 1);
+    } else if (mode === "result" && (key === "\u001b[B" || key === "j")) {
+      const { columns, rows } = dimensions();
+      const width = Math.max(72, Math.min(columns, 100));
+      resultScroll = Math.min(resultScrollLimit(result, exitCode, width, rows), resultScroll + 1);
+    } else if (mode === "result" && key === "\u001b[5~") {
+      resultScroll = Math.max(0, resultScroll - Math.max(1, dimensions().rows - 7));
+    } else if (mode === "result" && key === "\u001b[6~") {
+      const { columns, rows } = dimensions();
+      const width = Math.max(72, Math.min(columns, 100));
+      resultScroll = Math.min(
+        resultScrollLimit(result, exitCode, width, rows),
+        resultScroll + Math.max(1, rows - 7)
+      );
     } else if (key === "\r") {
       mode = "detail";
     } else if (key === "\u001b") {
@@ -334,7 +522,15 @@ export function runBbs(): void {
       selected = Number(key) - 1;
     }
     render();
-  });
+  };
+
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdout.on("resize", render);
+  process.stdin.on("data", onInput);
+  process.once("SIGTERM", onSignal);
+  process.once("SIGHUP", onSignal);
+  process.once("exit", restoreTerminal);
 
   process.stdout.write(`${ESC}?1049h${ESC}?25l`);
   render();

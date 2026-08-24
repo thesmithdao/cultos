@@ -5,6 +5,7 @@ import {
   renderConfirmation,
   renderDeck,
   renderPrompt,
+  renderRunning,
   renderResult,
   validateCommand
 } from "../src/bbs.js";
@@ -75,6 +76,7 @@ describe("BBS command deck", () => {
       renderCommand(0, 80),
       renderPrompt("doctor", "", 80),
       renderConfirmation("fund 12", 80),
+      renderRunning("doctor", "Checking GitHub...", 2, 80),
       renderResult("System ready.", 0, 80)
     ];
     for (const screen of screens) {
@@ -83,6 +85,28 @@ describe("BBS command deck", () => {
     }
     expect(new Set(screens.map((screen) => screen.split("\n").length)).size).toBe(1);
     expect(stripAnsi(renderResult("System ready.", 0, 80))).not.toContain("COMPLETE");
+  });
+
+  test("shows command progress", () => {
+    const doctor = stripAnsi(renderRunning("doctor", "Checking GitHub...", 2, 80));
+    const watch = stripAnsi(renderRunning("watch 12", "Waiting for an event...", 4, 80));
+
+    expect(doctor).toContain("RUNNING · 2s");
+    expect(doctor).toContain("Checking GitHub...");
+    expect(watch).toContain("WATCHING · 4s");
+    expect(watch).toContain("ESC CANCEL");
+  });
+
+  test("scrolls long results without changing the frame", () => {
+    const output = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join("\n");
+    const first = stripAnsi(renderResult(output, 0, 80, 18, 0));
+    const next = stripAnsi(renderResult(output, 0, 80, 18, 10));
+
+    expect(first).toContain("line 1");
+    expect(first).not.toContain("line 20");
+    expect(next).toContain("line 11");
+    expect(first.split("\n")).toHaveLength(18);
+    expect(next.split("\n")).toHaveLength(18);
   });
 
   test("uses the requested viewport height", () => {
