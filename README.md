@@ -34,22 +34,15 @@ A maintainer opens an issue, hires an ACP provider and receives a pull request. 
 
 [Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Provider integration](docs/provider-integration.md)
 
-## ACP prerequisite
+## Requirements
 
-CultOS requires the Virtuals ACP CLI with an active agent and signer.
-
-```bash
-acp configure
-acp agent list
-acp agent add-signer
-```
+CultOS requires Node.js 20+, Git and GitHub CLI. `cult start` installs and configures the Virtuals ACP CLI when needed.
 
 ## First transmission
 
 ```bash
 npm install -g @cultos/cli
-cult doctor
-cult ui
+cult start
 cult inspect 42
 ```
 
@@ -63,6 +56,7 @@ npx @cultos/cli doctor
 
 ```bash
 cult ui
+cult start
 cult doctor
 cult inspect 42
 cult hire 42 --provider 0xProvider
