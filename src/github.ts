@@ -88,7 +88,8 @@ function runGitHubWithExitCodes(args: string[], exitCodes: number[]): unknown {
     throw new Error(result.stderr.trim() || result.stdout.trim() || "GitHub CLI command failed");
   }
 
-  return JSON.parse(result.stdout);
+  const output = result.stdout.trim();
+  return output ? JSON.parse(output) : [];
 }
 
 export function getIssue(reference: string, repository?: string): GitHubIssue {
