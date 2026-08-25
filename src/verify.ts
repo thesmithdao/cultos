@@ -1,31 +1,31 @@
 import type { CultJob } from "./state.js";
 import {
-  getPullRequest,
-  getPullRequestChecks,
-  type GitHubCheck,
-  type GitHubPullRequest
-} from "./github.js";
+  getRepositoryChecks,
+  getRepositoryPullRequest,
+  type RepositoryCheck,
+  type RepositoryPullRequest
+} from "./repository.js";
 
 export interface VerificationResult {
   pullRequest: number;
   url: string;
   headSha: string;
-  checks: GitHubCheck[];
+  checks: RepositoryCheck[];
   passed: boolean;
   failures: string[];
 }
 
 export function evaluateDelivery(
   job: CultJob,
-  pullRequest: GitHubPullRequest,
-  checks: GitHubCheck[],
+  pullRequest: RepositoryPullRequest,
+  checks: RepositoryCheck[],
   requiredState: "OPEN" | "MERGED" = "OPEN"
 ): VerificationResult {
   if (!job.delivery) {
     throw new Error("The provider has not submitted a pull-request delivery");
   }
   const failures: string[] = [];
-  const repositoryPrefix = `${job.contract.repository}/pull/`;
+  const repositoryPrefix = `${job.contract.repository}/pull`;
 
   if (!pullRequest.url.startsWith(repositoryPrefix)) {
     failures.push("Pull request belongs to a different repository");
@@ -67,7 +67,7 @@ export function verifyJob(
   if (!job.delivery) {
     throw new Error("The provider has not submitted a pull-request delivery");
   }
-  const pullRequest = getPullRequest(job.delivery.url);
-  const checks = getPullRequestChecks(job.delivery.url);
+  const pullRequest = getRepositoryPullRequest(job.delivery.url);
+  const checks = getRepositoryChecks(pullRequest);
   return evaluateDelivery(job, pullRequest, checks, requiredState);
 }

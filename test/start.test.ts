@@ -24,6 +24,25 @@ function installGit(): void {
   ].join("\n"));
 }
 
+function installGitLawb(): void {
+  executable("git", [
+    "case \"$*\" in",
+    "  --version) echo 'git version 2.0' ;;",
+    "  'rev-parse --show-toplevel') echo '/tmp/example' ;;",
+    "  'remote get-url origin') echo 'gitlawb://did:key:z6MkOwner/repo' ;;",
+    "  *) exit 1 ;;",
+    "esac"
+  ].join("\n"));
+  executable("gl", [
+    "case \"$*\" in",
+    "  --version) echo 'gl 0.7.1' ;;",
+    "  'identity show') echo 'did:key:z6MkOwner' ;;",
+    "  'repo info z6MkOwner/repo') echo 'Repository: z6MkOwner/repo' ;;",
+    "  *) exit 1 ;;",
+    "esac"
+  ].join("\n"));
+}
+
 function installGitHub(authenticated = true): void {
   const authState = join(directory, "github-authenticated");
   if (authenticated) writeFileSync(authState, "ready", "utf8");
@@ -95,6 +114,16 @@ describe("cult start", () => {
   test("opens CultOS when the environment is ready", async () => {
     installGit();
     installGitHub();
+    installAcp();
+
+    const result = await start();
+
+    expect(result.ready).toBe(true);
+    expect(result.launch).toHaveBeenCalledOnce();
+  });
+
+  test("opens CultOS from a GitLawb repository", async () => {
+    installGitLawb();
     installAcp();
 
     const result = await start();

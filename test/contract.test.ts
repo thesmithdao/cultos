@@ -63,6 +63,22 @@ describe("createWorkContract", () => {
       }
     });
   });
+
+  it("creates a GitLawb pull-request contract", () => {
+    expect(
+      createWorkContract({
+        platform: "gitlawb",
+        repositoryUrl: "gitlawb://did:key:z6MkOwner/example",
+        issueUrl: "gitlawb://did:key:z6MkOwner/example/issues/issue-id",
+        baseRef: "main",
+        title: "Add signed delivery",
+        body: "- [ ] Verify the certificate"
+      })
+    ).toMatchObject({
+      kind: "cultos.gitlawb.issue.v1",
+      delivery: { type: "gitlawb.pull_request" }
+    });
+  });
 });
 
 describe("pull-request delivery", () => {
@@ -70,6 +86,16 @@ describe("pull-request delivery", () => {
     const delivery = createPullRequestDelivery(
       "https://github.com/thecultos/example/pull/47",
       "abc123456789"
+    );
+
+    expect(parsePullRequestDelivery(JSON.stringify(delivery))).toEqual(delivery);
+  });
+
+  it("round-trips a GitLawb deliverable", () => {
+    const delivery = createPullRequestDelivery(
+      "gitlawb://did:key:z6MkOwner/example/pull/1",
+      "abc123456789",
+      "gitlawb"
     );
 
     expect(parsePullRequestDelivery(JSON.stringify(delivery))).toEqual(delivery);

@@ -20,7 +20,14 @@ import {
 import { runBbs } from "./bbs.js";
 import { runDoctor } from "./doctor.js";
 import { runStart } from "./start.js";
-import { commentOnIssue, getIssue, getPullRequest, getRepository } from "./github.js";
+import {
+  detectRepositoryPlatform,
+  commentOnRepositoryIssue,
+  getRepositoryInfo,
+  getRepositoryIssue,
+  getRepositoryPullRequest
+} from "./repository.js";
+import type { RepositoryPlatform } from "./contract.js";
 import { getJob, listJobs, saveJob, updateJob } from "./state.js";
 import { verifyJob } from "./verify.js";
 
@@ -32,6 +39,18 @@ function issueNumber(value: string): number {
     throw new Error(`Invalid issue number: ${value}`);
   }
   return parsed;
+}
+
+function platform(value?: string): RepositoryPlatform {
+  if (!value) return detectRepositoryPlatform();
+  if (value !== "github" && value !== "gitlawb") {
+    throw new Error(`Invalid repository platform: ${value}`);
+  }
+  return value;
+}
+
+function issueReference(value: string, repositoryPlatform: RepositoryPlatform): number | string {
+  return repositoryPlatform === "github" ? issueNumber(value) : value.match(/\/issues\/([^/]+)$/)?.[1] ?? value;
 }
 
 function chainId(value: string): number {
@@ -67,7 +86,7 @@ function settlementReceipt(job: ReturnType<typeof getJob>, outcome: "completed" 
   ].join("\n");
 }
 
-function printJob(issue: number): void {
+function printJob(issue: number | string): void {
   const job = getJob(issue);
   console.log(pc.bold(`\nCULT OS // ISSUE #${job.issueNumber}\n`));
   console.log(`${pc.dim("ACP JOB")}     ${job.jobId}`);
@@ -85,10 +104,10 @@ function printJob(issue: number): void {
 
 program
   .name("cult")
-  .description("GitHub-native work for the agent economy.")
+  .description("Repository work for the agent economy.")
   .version("0.2.5");
 
-program.command("doctor").description("Check the local GitHub and ACP setup").action(runDoctor);
+program.command("doctor").description("Check the local repository and ACP setup").action(runDoctor);
 program.command("ui").description("Open the CultOS command deck").action(runBbs);
 program.command("start").description("Set up CultOS and open the terminal").action(async () => {
   if (!await runStart()) process.exitCode = 1;
@@ -96,13 +115,16 @@ program.command("start").description("Set up CultOS and open the terminal").acti
 
 program
   .command("inspect")
-  .argument("<issue>", "GitHub issue number or URL")
-  .option("-R, --repo <owner/name>", "GitHub repository")
-  .description("Build a Cult Work Contract from a GitHub issue")
-  .action((reference: string, options: { repo?: string }) => {
-    const repository = getRepository(options.repo);
-    const issue = getIssue(reference, options.repo);
+  .argument("<issue>", "Issue ID or URL")
+  .option("-R, --repo <owner/name>", "Repository")
+  .option("--platform <name>", "Repository platform: github or gitlawb")
+  .description("Build a Cult Work Contract from an issue")
+  .action((reference: string, options: { repo?: string; platform?: string }) => {
+    const repositoryPlatform = platform(options.platform);
+    const repository = getRepositoryInfo(options.repo, repositoryPlatform);
+    const issue = getRepositoryIssue(reference, options.repo, repositoryPlatform);
     const contract = createWorkContract({
+      platform: repositoryPlatform,
       repositoryUrl: repository.url,
       issueUrl: issue.url,
       baseRef: repository.defaultBranch,
@@ -110,7 +132,7 @@ program
       body: issue.body
     });
 
-    console.log(pc.bold(`\nIssue #${issue.number}`));
+    console.log(pc.bold(`\nIssue #${issue.id}`));
     console.log(issue.title);
     console.log(pc.dim(`\n${repository.nameWithOwner}\n`));
 
@@ -129,23 +151,26 @@ program
 
 program
   .command("hire")
-  .argument("<issue>", "GitHub issue number")
+  .argument("<issue>", "Issue ID")
   .requiredOption("--provider <address>", "ACP provider wallet address")
-  .option("-R, --repo <owner/name>", "GitHub repository")
+  .option("-R, --repo <owner/name>", "Repository")
+  .option("--platform <name>", "Repository platform: github or gitlawb")
   .option("--offering <name>", "ACP offering name")
   .option("--chain <id>", "ACP chain ID", "8453")
   .option("--expiry <seconds>", "Custom job expiry", "86400")
-  .description("Create an ACP job from a GitHub issue")
+  .description("Create an ACP job from an issue")
   .action((value: string, options: Record<string, string | undefined>) => {
-    const number = issueNumber(value);
-    const existing = listJobs().find((job) => job.issueNumber === number);
+    const repositoryPlatform = platform(options.platform);
+    const number = issueReference(value, repositoryPlatform);
+    const existing = listJobs().find((job) => String(job.issueNumber) === String(number));
     if (existing) {
       throw new Error(`Issue #${number} is already linked to ACP job ${existing.jobId}`);
     }
 
-    const repository = getRepository(options.repo);
-    const issue = getIssue(value, options.repo);
+    const repository = getRepositoryInfo(options.repo, repositoryPlatform);
+    const issue = getRepositoryIssue(value, options.repo, repositoryPlatform);
     const contract = createWorkContract({
+      platform: repositoryPlatform,
       repositoryUrl: repository.url,
       issueUrl: issue.url,
       baseRef: repository.defaultBranch,
@@ -168,7 +193,7 @@ program
     const now = new Date().toISOString();
 
     saveJob({
-      issueNumber: issue.number,
+      issueNumber: issue.id,
       repository: repository.nameWithOwner,
       contract,
       provider,
@@ -181,17 +206,17 @@ program
       updatedAt: now
     });
 
-    console.log(pc.green(`ACP job ${created.jobId} created for issue #${issue.number}.`));
-    console.log(pc.dim(`Run cult watch ${issue.number} to follow it.`));
+    console.log(pc.green(`ACP job ${created.jobId} created for issue #${issue.id}.`));
+    console.log(pc.dim(`Run cult watch ${issue.id} to follow it.`));
   });
 
 program
   .command("watch")
-  .argument("<issue>", "GitHub issue number")
+  .argument("<issue>", "Issue ID")
   .option("--timeout <seconds>", "Stop waiting after this many seconds")
   .description("Wait until an ACP job needs attention")
   .action((value: string, options: { timeout?: string }) => {
-    const number = issueNumber(value);
+    const number = value;
     const job = getJob(number);
     console.log(pc.dim(`Watching ACP job ${job.jobId}...`));
     const watched = watchJob(
@@ -220,10 +245,10 @@ program
 
 program
   .command("fund")
-  .argument("<issue>", "GitHub issue number")
+  .argument("<issue>", "Issue ID")
   .description("Fund the quoted ACP job")
   .action((value: string) => {
-    const number = issueNumber(value);
+    const number = value;
     const job = getJob(number);
     if (["funded", "submitted", "verified", "completed", "rejected"].includes(job.status)) {
       throw new Error(`ACP job ${job.jobId} is already ${job.status}`);
@@ -239,11 +264,11 @@ program
 
 program
   .command("message")
-  .argument("<issue>", "GitHub issue number")
+  .argument("<issue>", "Issue ID")
   .argument("<content>", "Message text")
   .description("Send a message to the ACP job room")
   .action((value: string, content: string) => {
-    const job = getJob(issueNumber(value));
+    const job = getJob(value);
     sendMessage(job.jobId, job.chainId, content);
     console.log(pc.green("\nMessage sent.\n"));
   });
@@ -262,22 +287,26 @@ program
 program
   .command("deliver")
   .requiredOption("--job <id>", "ACP job ID")
-  .requiredOption("--pr <url>", "Delivered GitHub pull request")
+  .requiredOption("--pr <url>", "Delivered pull request")
   .option("--chain <id>", "ACP chain ID", "8453")
   .description("Submit a pull request as an ACP provider")
   .action((options: { job: string; pr: string; chain: string }) => {
-    const pullRequest = getPullRequest(options.pr);
-    const delivery = createPullRequestDelivery(pullRequest.url, pullRequest.headSha);
+    const pullRequest = getRepositoryPullRequest(options.pr);
+    const delivery = createPullRequestDelivery(
+      pullRequest.url,
+      pullRequest.headSha,
+      pullRequest.platform ?? "github"
+    );
     submitJob(options.job, chainId(options.chain), delivery);
     console.log(pc.green(`\nDelivered PR #${pullRequest.number} at ${pullRequest.headSha.slice(0, 12)}.\n`));
   });
 
 program
   .command("verify")
-  .argument("<issue>", "GitHub issue number")
-  .description("Verify the delivered pull request and CI")
+  .argument("<issue>", "Issue ID")
+  .description("Verify the delivered pull request")
   .action((value: string) => {
-    const number = issueNumber(value);
+    const number = value;
     const result = verifyJob(getJob(number));
 
     console.log(pc.bold(`\nCULT OS // VERIFY PR #${result.pullRequest}\n`));
@@ -302,13 +331,13 @@ program
 
 program
   .command("settle")
-  .argument("<issue>", "GitHub issue number")
+  .argument("<issue>", "Issue ID")
   .option("--approve", "Approve the delivery")
   .option("--reject", "Reject the delivery")
   .option("--reason <text>", "Settlement reason", "Work reviewed through CultOS")
   .description("Complete or reject an ACP job and publish its receipt")
   .action((value: string, options: { approve?: boolean; reject?: boolean; reason: string }) => {
-    const number = issueNumber(value);
+    const number = value;
     const job = getJob(number);
     if (options.approve === options.reject) {
       throw new Error("Choose either --approve or --reject");
@@ -336,7 +365,8 @@ program
       updateJob(number, { status: outcome, settledByCultos: outcome });
     }
 
-    commentOnIssue(number, settlementReceipt(job, outcome));
+    const repositoryPlatform = job.contract.kind === "cultos.gitlawb.issue.v1" ? "gitlawb" : "github";
+    commentOnRepositoryIssue(repositoryPlatform, job.repository, number, settlementReceipt(job, outcome));
     updateJob(number, { receiptPostedAt: new Date().toISOString() });
     console.log(pc.green(`\nACP job ${job.jobId} ${outcome}. Receipt posted to issue #${number}.\n`));
   });
