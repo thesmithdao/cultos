@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import pc from "picocolors";
 import { commandExists, githubIsAuthenticated } from "./github.js";
+import { parseGitLawbRemote } from "./gitlawb.js";
 
 interface Check {
   name: string;
@@ -26,11 +27,14 @@ function repositoryCheck(): Check {
   });
   const value = remote.stdout.trim();
   const githubRepository = value.match(/github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/)?.[1];
+  const gitlawbRepository = parseGitLawbRemote(value);
 
   return {
     name: "Repository",
     ok: true,
-    detail: githubRepository ?? "ready"
+    detail: githubRepository ?? (gitlawbRepository
+      ? `${gitlawbRepository.owner}/${gitlawbRepository.repository}`
+      : "unsupported remote")
   };
 }
 
@@ -74,17 +78,27 @@ function acpChecks(hasAcp: boolean): Check[] {
 }
 
 export function runDoctor(): void {
+  const remote = spawnSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" });
+  const usesGitLawb = Boolean(parseGitLawbRemote(remote.stdout ?? ""));
   const hasGitHub = commandExists("gh");
+  const hasGitLawb = commandExists("gl");
+  const hasGitLawbIdentity = hasGitLawb && spawnSync("gl", ["identity", "show"], { stdio: "ignore" }).status === 0;
   const hasAcp = commandExists("acp");
   const hasGitHubAuth = hasGitHub && githubIsAuthenticated();
   const checks: Check[] = [
     { name: "Node.js", ok: true, detail: process.version },
     { name: "Git", ok: commandExists("git"), detail: "installed" },
-    {
-      name: "GitHub CLI",
-      ok: hasGitHubAuth,
-      detail: hasGitHubAuth ? "authenticated" : hasGitHub ? "authentication required" : "not installed"
-    },
+    usesGitLawb
+      ? {
+          name: "GitLawb CLI",
+          ok: hasGitLawbIdentity,
+          detail: hasGitLawbIdentity ? "identity ready" : hasGitLawb ? "identity required" : "not installed"
+        }
+      : {
+          name: "GitHub CLI",
+          ok: hasGitHubAuth,
+          detail: hasGitHubAuth ? "authenticated" : hasGitHub ? "authentication required" : "not installed"
+        },
     ...acpChecks(hasAcp),
     repositoryCheck()
   ];

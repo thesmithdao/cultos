@@ -2,32 +2,37 @@ import { z } from "zod";
 
 export const workContractKind = "cultos.github.issue.v1" as const;
 export const pullRequestDeliveryKind = "cultos.github.pull-request.v1" as const;
+export const gitlawbWorkContractKind = "cultos.gitlawb.issue.v1" as const;
+export const gitlawbPullRequestDeliveryKind = "cultos.gitlawb.pull-request.v1" as const;
+
+export type RepositoryPlatform = "github" | "gitlawb";
 
 export interface IssueWorkContract {
-  kind: typeof workContractKind;
+  kind: typeof workContractKind | typeof gitlawbWorkContractKind;
   repository: string;
   issue: string;
   baseRef: string;
   title: string;
   acceptanceCriteria: string[];
   delivery: {
-    type: "github.pull_request";
+    type: "github.pull_request" | "gitlawb.pull_request";
   };
 }
 
 export interface PullRequestDelivery {
-  kind: typeof pullRequestDeliveryKind;
+  kind: typeof pullRequestDeliveryKind | typeof gitlawbPullRequestDeliveryKind;
   url: string;
   headSha: string;
 }
 
 const pullRequestDeliverySchema = z.object({
-  kind: z.literal(pullRequestDeliveryKind),
-  url: z.url(),
+  kind: z.union([z.literal(pullRequestDeliveryKind), z.literal(gitlawbPullRequestDeliveryKind)]),
+  url: z.string().min(1),
   headSha: z.string().min(7)
 });
 
 interface ContractInput {
+  platform?: RepositoryPlatform;
   repositoryUrl: string;
   issueUrl: string;
   baseRef: string;
@@ -78,22 +83,27 @@ export function extractAcceptanceCriteria(body: string): string[] {
 }
 
 export function createWorkContract(input: ContractInput): IssueWorkContract {
+  const platform = input.platform ?? "github";
   return {
-    kind: workContractKind,
+    kind: platform === "gitlawb" ? gitlawbWorkContractKind : workContractKind,
     repository: input.repositoryUrl,
     issue: input.issueUrl,
     baseRef: input.baseRef,
     title: input.title,
     acceptanceCriteria: extractAcceptanceCriteria(input.body),
     delivery: {
-      type: "github.pull_request"
+      type: platform === "gitlawb" ? "gitlawb.pull_request" : "github.pull_request"
     }
   };
 }
 
-export function createPullRequestDelivery(url: string, headSha: string): PullRequestDelivery {
+export function createPullRequestDelivery(
+  url: string,
+  headSha: string,
+  platform: RepositoryPlatform = "github"
+): PullRequestDelivery {
   return {
-    kind: pullRequestDeliveryKind,
+    kind: platform === "gitlawb" ? gitlawbPullRequestDeliveryKind : pullRequestDeliveryKind,
     url,
     headSha
   };

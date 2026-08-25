@@ -3,6 +3,7 @@ import { createInterface } from "node:readline/promises";
 import pc from "picocolors";
 import { z } from "zod";
 import { runBbs } from "./bbs.js";
+import { parseGitLawbRemote } from "./gitlawb.js";
 
 interface CommandResult {
   status: number;
@@ -168,29 +169,54 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
   if (root.status !== 0) return fail("Not inside a Git repository", "Open a repository, then run cult start again.");
   const remote = captured("git", ["remote", "get-url", "origin"]);
   const remoteRepository = githubRepository(remote.stdout);
-  if (remote.status !== 0 || !remoteRepository) {
-    return fail("The origin remote is not a GitHub repository");
+  const gitlawbRepository = parseGitLawbRemote(remote.stdout);
+  if (remote.status !== 0 || (!remoteRepository && !gitlawbRepository)) {
+    return fail("The origin remote is not a supported repository");
   }
-  console.log(`${pc.green("●")} ${remoteRepository}`);
+  console.log(`${pc.green("●")} ${remoteRepository ?? `${gitlawbRepository?.owner}/${gitlawbRepository?.repository}`}`);
 
-  stage(2, "GITHUB");
-  if (!exists("gh")) {
-    return fail("GitHub CLI is not installed", "Install it from https://cli.github.com, then run cult start again.");
-  }
-  if (captured("gh", ["auth", "status"]).status !== 0) {
-    action("GitHub authentication required");
-    if (!await confirm("Sign in to GitHub now?")) return paused();
-    if (!interactive("gh", ["auth", "login"])) return fail("GitHub authentication was not completed");
-    if (captured("gh", ["auth", "status"]).status !== 0) {
-      return fail("GitHub authentication was not completed");
+  let repositoryName: string;
+  if (gitlawbRepository) {
+    stage(2, "GITLAWB");
+    if (!exists("gl")) {
+      action("GitLawb CLI is not installed");
+      if (!await confirm("Install the GitLawb CLI now?")) return paused();
+      if (!interactive("npm", ["install", "-g", "@gitlawb/gl"], 5 * 60_000)) {
+        return fail("GitLawb CLI installation failed");
+      }
+      if (!exists("gl")) return fail("GitLawb CLI is still unavailable after installation");
     }
+    if (captured("gl", ["identity", "show"]).status !== 0) {
+      action("GitLawb identity required");
+      if (!await confirm("Create and register a GitLawb identity now?")) return paused();
+      if (!interactive("gl", ["identity", "new"])) return fail("GitLawb identity creation failed");
+      if (!interactive("gl", ["register"])) return fail("GitLawb registration failed");
+    }
+    const reference = `${gitlawbRepository.owner.replace(/^did:key:/, "")}/${gitlawbRepository.repository}`;
+    const repository = captured("gl", ["repo", "info", reference]);
+    if (repository.status !== 0) return fail("GitLawb cannot access this repository", repository.stderr.trim());
+    repositoryName = reference;
+    console.log(`${pc.green("●")} ${repositoryName}`);
+  } else {
+    stage(2, "GITHUB");
+    if (!exists("gh")) {
+      return fail("GitHub CLI is not installed", "Install it from https://cli.github.com, then run cult start again.");
+    }
+    if (captured("gh", ["auth", "status"]).status !== 0) {
+      action("GitHub authentication required");
+      if (!await confirm("Sign in to GitHub now?")) return paused();
+      if (!interactive("gh", ["auth", "login"])) return fail("GitHub authentication was not completed");
+      if (captured("gh", ["auth", "status"]).status !== 0) {
+        return fail("GitHub authentication was not completed");
+      }
+    }
+    const repository = captured("gh", ["repo", "view", "--json", "nameWithOwner"]);
+    if (repository.status !== 0) return fail("GitHub cannot access this repository", repository.stderr.trim());
+    const repositoryResult = parsed(z.object({ nameWithOwner: z.string() }), repository.stdout);
+    if (!repositoryResult) return fail("GitHub returned an unreadable repository response");
+    repositoryName = repositoryResult.nameWithOwner;
+    console.log(`${pc.green("●")} ${repositoryName}`);
   }
-  const repository = captured("gh", ["repo", "view", "--json", "nameWithOwner"]);
-  if (repository.status !== 0) return fail("GitHub cannot access this repository", repository.stderr.trim());
-  const repositoryResult = parsed(z.object({ nameWithOwner: z.string() }), repository.stdout);
-  if (!repositoryResult) return fail("GitHub returned an unreadable repository response");
-  const repositoryName = repositoryResult.nameWithOwner;
-  console.log(`${pc.green("●")} ${repositoryName}`);
 
   stage(3, "ACP");
   if (!exists("acp")) {

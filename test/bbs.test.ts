@@ -24,7 +24,7 @@ describe("BBS command deck", () => {
     expect(screen).toContain("settle <issue> --approve");
     expect(screen).not.toContain("…");
     for (const description of [
-      "Check GitHub + ACP.",
+      "Check repo + ACP.",
       "Create work contract",
       "Open a provider job.",
       "Read job updates.",
@@ -32,7 +32,7 @@ describe("BBS command deck", () => {
       "Message provider.",
       "Set provider price.",
       "Submit a PR.",
-      "Check commit + CI.",
+      "Check delivery.",
       "Release payment.",
       "Reject with receipt.",
       "List repo jobs."
@@ -44,7 +44,7 @@ describe("BBS command deck", () => {
 
     expect(screen).toContain("VERIFY // MAINTAINER");
     expect(screen).toContain("cult verify <issue>");
-    expect(screen).toContain("Check commit + CI.");
+    expect(screen).toContain("Check delivery.");
   });
 
   test("renders all command screens", () => {

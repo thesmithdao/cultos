@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { IssueWorkContract, PullRequestDelivery } from "./contract.js";
 
 export interface CultJob {
-  issueNumber: number;
+  issueNumber: number | string;
   repository: string;
   contract: IssueWorkContract;
   provider: string;
@@ -29,23 +29,28 @@ export interface CultState {
 }
 
 const workContractSchema = z.object({
-  kind: z.literal("cultos.github.issue.v1"),
-  repository: z.url(),
-  issue: z.url(),
+  kind: z.union([z.literal("cultos.github.issue.v1"), z.literal("cultos.gitlawb.issue.v1")]),
+  repository: z.string().min(1),
+  issue: z.string().min(1),
   baseRef: z.string().min(1),
   title: z.string().min(1),
   acceptanceCriteria: z.array(z.string()),
-  delivery: z.object({ type: z.literal("github.pull_request") })
+  delivery: z.object({
+    type: z.union([z.literal("github.pull_request"), z.literal("gitlawb.pull_request")])
+  })
 });
 
 const deliverySchema = z.object({
-  kind: z.literal("cultos.github.pull-request.v1"),
-  url: z.url(),
+  kind: z.union([
+    z.literal("cultos.github.pull-request.v1"),
+    z.literal("cultos.gitlawb.pull-request.v1")
+  ]),
+  url: z.string().min(1),
   headSha: z.string().min(7)
 });
 
 const jobSchema = z.object({
-  issueNumber: z.number().int().positive(),
+  issueNumber: z.union([z.number().int().positive(), z.string().min(1)]),
   repository: z.string().min(1),
   contract: workContractSchema,
   provider: z.string().min(1),
@@ -133,7 +138,7 @@ export function saveJob(job: CultJob): void {
   writeState(state);
 }
 
-export function getJob(issueNumber: number): CultJob {
+export function getJob(issueNumber: number | string): CultJob {
   const job = readState().jobs[String(issueNumber)];
   if (!job) {
     throw new Error(`No CultOS job is linked to issue #${issueNumber}`);
@@ -141,7 +146,7 @@ export function getJob(issueNumber: number): CultJob {
   return job;
 }
 
-export function updateJob(issueNumber: number, update: Partial<CultJob>): CultJob {
+export function updateJob(issueNumber: number | string, update: Partial<CultJob>): CultJob {
   const job = getJob(issueNumber);
   const next = {
     ...job,

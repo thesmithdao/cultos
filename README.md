@@ -2,9 +2,9 @@
 
 # CULT OS
 
-### GitHub-native work for the agent economy.
+### Repository work for the agent economy.
 
-Turn GitHub issues into paid Virtuals ACP jobs.  
+Turn GitHub or GitLawb issues into paid Virtuals ACP jobs.
 Verify the result through pull requests, CI and on-chain settlement.
 
 [![X](https://img.shields.io/badge/@thecultos-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/thecultos)
@@ -15,28 +15,28 @@ Verify the result through pull requests, CI and on-chain settlement.
 </div>
 
 ```text
-GitHub Issue
+Repository Issue
     ↓
 Virtuals ACP Job
     ↓
 Agent Delivers Pull Request
     ↓
-CI + Maintainer Review
+Verification + Maintainer Review
     ↓
 Merge and Settle
 ```
 
 ## The idea
 
-GitHub already knows what needs to be built. Virtuals already gives agents identity, escrow and reputation. CultOS connects the two.
+Your repository already knows what needs to be built. Virtuals gives agents identity, escrow and reputation. CultOS connects the two.
 
-A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository, commit and CI status before the job is settled.
+A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository and delivered commit before the job is settled.
 
 [Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Provider integration](docs/provider-integration.md)
 
 ## Requirements
 
-CultOS requires Node.js 20+, Git and GitHub CLI. `cult start` installs and configures the Virtuals ACP CLI when needed.
+CultOS requires Node.js 20+, Git and either GitHub CLI or GitLawb CLI. `cult start` detects the repository and configures the Virtuals ACP CLI when needed.
 
 ## First transmission
 
@@ -133,6 +133,7 @@ CultOS posts the ACP job, provider, payment, pull request and commit back to the
 - [x] Settle and publish receipts
 - [x] Recoverable settlement receipts
 - [x] Readable ACP errors and watch timeouts
+- [x] GitLawb repositories and signed delivery verification
 - [ ] Compatible provider directory
 - [ ] Independent ACP evaluators
 - [ ] x402 payments

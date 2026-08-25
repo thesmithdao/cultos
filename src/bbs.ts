@@ -21,7 +21,7 @@ interface DeckCommand {
 }
 
 const commands: DeckCommand[] = [
-  { command: "doctor", phase: "CHECK", role: "Maintainer", description: "Check GitHub + ACP.", next: "Resolve missing checks, then inspect an issue." },
+  { command: "doctor", phase: "CHECK", role: "Maintainer", description: "Check repo + ACP.", next: "Resolve missing checks, then inspect an issue." },
   { command: "inspect <issue>", phase: "PLAN", role: "Maintainer", description: "Create work contract", next: "Review the contract, then choose a provider." },
   { command: "hire <issue> --provider <address>", phase: "HIRE", role: "Maintainer", description: "Open a provider job.", next: "Watch the job for the provider quote." },
   { command: "watch <issue>", phase: "SYNC", role: "Either", description: "Read job updates.", next: "Take the action shown by the latest job event." },
@@ -29,9 +29,9 @@ const commands: DeckCommand[] = [
   { command: "message <issue> <text>", phase: "COMMS", role: "Either", description: "Message provider.", next: "Watch for the other party's response." },
   { command: "quote --job <id> --amount <usdc>", phase: "PROVIDER", role: "Provider", description: "Set provider price.", next: "Wait for the maintainer to fund the quote." },
   { command: "deliver --job <id> --pr <url>", phase: "PROVIDER", role: "Provider", description: "Submit a PR.", next: "Wait for verification and maintainer review." },
-  { command: "verify <issue>", phase: "VERIFY", role: "Maintainer", description: "Check commit + CI.", next: "Review and merge the verified pull request." },
-  { command: "settle <issue> --approve", phase: "SETTLE", role: "Maintainer", description: "Release payment.", next: "CultOS posts the settlement receipt to GitHub." },
-  { command: "settle <issue> --reject", phase: "REJECT", role: "Maintainer", description: "Reject with receipt.", next: "Review the receipt and close the GitHub issue if needed." },
+  { command: "verify <issue>", phase: "VERIFY", role: "Maintainer", description: "Check delivery.", next: "Review and merge the verified pull request." },
+  { command: "settle <issue> --approve", phase: "SETTLE", role: "Maintainer", description: "Release payment.", next: "CultOS posts the settlement receipt to the issue." },
+  { command: "settle <issue> --reject", phase: "REJECT", role: "Maintainer", description: "Reject with receipt.", next: "Review the receipt and close the issue if needed." },
   { command: "jobs", phase: "INDEX", role: "Either", description: "List repo jobs.", next: "Open the relevant issue or continue its workflow." }
 ];
 
@@ -236,7 +236,7 @@ export function renderConfirmation(value: string, columns = 94, rows = 23): stri
     "",
     `cult ${value}`,
     "",
-    "This command can change GitHub or ACP state.",
+    "This command can change repository or ACP state.",
     "Review the command before continuing."
   ], " Y CONFIRM   N CANCEL   ESC COMMAND MODE ", width, rows, "CONFIRM");
 }
