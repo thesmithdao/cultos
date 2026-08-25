@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
 import pc from "picocolors";
 import { Command } from "commander";
 import {
@@ -32,6 +33,9 @@ import { getJob, listJobs, saveJob, updateJob } from "./state.js";
 import { verifyJob } from "./verify.js";
 
 const program = new Command();
+const packageVersion = (JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+) as { version: string }).version;
 
 function issueNumber(value: string): number {
   const parsed = Number.parseInt(value, 10);
@@ -105,7 +109,7 @@ function printJob(issue: number | string): void {
 program
   .name("cult")
   .description("Repository work for the agent economy.")
-  .version("0.2.5");
+  .version(packageVersion);
 
 program.command("doctor").description("Check the local repository and ACP setup").action(runDoctor);
 program.command("ui").description("Open the CultOS command deck").action(runBbs);

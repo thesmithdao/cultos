@@ -1,6 +1,6 @@
 {
   "name": "@cultos/cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Repository work for the agent economy.",
   "type": "module",
   "bin": {
