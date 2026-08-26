@@ -28,7 +28,7 @@ case "$1 $2" in
   "issue show") printf '%s\\n' 'Issue: issue-id' '  Title:   Fix adapter' '  Status:  open' '' 'Acceptance criteria' '- [ ] Tests pass' ;;
   "pr view") printf '%s\\n' 'PR #1: Fix adapter' '  Status: open' '  Branch: feature/fix → main' ;;
   "cert list") printf '%s\\n' '  abcdef12  2026-08-25T00:00:00  refs/heads/feature/fix  abc123456789' ;;
-  "cert show") printf '%s\\n' 'Signature verification:' '  VALID' ;;
+  "cert show") [ "$3" = "z6MkOwner/example" ] || exit 1; printf '%s\\n' 'Signature verification:' '  VALID' ;;
   *) exit 1 ;;
 esac`);
   executable("git", `

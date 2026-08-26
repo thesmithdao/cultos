@@ -186,7 +186,7 @@ export function getGitLawbVerificationChecks(pullRequest: RepositoryPullRequest)
   if (!certificate) {
     return [{ name: "Signed push certificate", state: "missing", bucket: "fail" }];
   }
-  const args = ["cert", "show", parsed.repository, certificate.id, "--verify"];
+  const args = ["cert", "show", `${owner}/${parsed.repository}`, certificate.id, "--verify"];
   if (process.env.CULTOS_GITLAWB_DIR) args.push("--dir", process.env.CULTOS_GITLAWB_DIR);
   const result = spawnSync("gl", args, {
     encoding: "utf8",
