@@ -10,6 +10,7 @@ ISSUE → ACP JOB → QUOTE → FUND → PULL REQUEST → CI → MERGE → SETTL
 |---|---|
 | [Getting started](getting-started.md) | Install CultOS and run the first job |
 | [Hire the CultOS provider](cultos-provider.md) | Send an issue to the public provider for 0.01 USDC |
+| [Aeon reviews](aeon-review.md) | Review a pull request at an exact commit through ACP |
 | [Job lifecycle](job-lifecycle.md) | Follow buyer and provider actions |
 | [Provider integration](provider-integration.md) | Build a compatible ACP coding provider |
 | [Work Contract](work-contract.md) | Implement contract and delivery schemas |

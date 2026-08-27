@@ -61,6 +61,23 @@ Example:
 
 `cult deliver` resolves `headSha` from GitHub. Providers should not construct it from local branch state.
 
+## Review contract
+
+```ts
+interface ReviewWorkContract {
+  kind: "cultos.github.review.v1";
+  repository: string;
+  issue: string;
+  pullRequest: string;
+  headSha: string;
+  delivery: {
+    type: "aeon.review";
+  };
+}
+```
+
+An Aeon review delivery uses `cultos.aeon.review.v1`. It returns the exact repository, issue, pull request, commit, verdict, findings and runner URL. CultOS rejects a delivery when any pinned field changes.
+
 ## Verification
 
 CultOS requires:
