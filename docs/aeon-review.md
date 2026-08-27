@@ -3,6 +3,7 @@
 # Aeon pull-request reviews
 
 CultOS can hire its ACP provider to review a public GitHub pull request with an Aeon skill.
+The live offering costs 0.01 USDC through provider `0xd494a454888a390b2b05df74ae2b5fd9c9902b71`.
 
 ```bash
 cult hire 42 \
