@@ -15,7 +15,10 @@ import {
 } from "./acp.js";
 import {
   createPullRequestDelivery,
+  createReviewContract,
   createWorkContract,
+  isAeonReviewDelivery,
+  parseAeonReviewDelivery,
   parsePullRequestDelivery
 } from "./contract.js";
 import { runBbs } from "./bbs.js";
@@ -29,8 +32,8 @@ import {
   getRepositoryPullRequest
 } from "./repository.js";
 import type { RepositoryPlatform } from "./contract.js";
-import { getJob, listJobs, saveJob, updateJob } from "./state.js";
-import { verifyJob } from "./verify.js";
+import { getJob, jobReference, listJobs, saveJob, updateJob } from "./state.js";
+import { verifyJob, verifyReviewJob } from "./verify.js";
 
 const program = new Command();
 const packageVersion = (JSON.parse(
@@ -74,6 +77,18 @@ function positiveInteger(value: string, name: string): number {
 }
 
 function settlementReceipt(job: ReturnType<typeof getJob>, outcome: "completed" | "rejected"): string {
+  const delivery = job.delivery
+    ? isAeonReviewDelivery(job.delivery)
+      ? [
+          `| Review | ${job.delivery.run.url} |`,
+          `| Verdict | **${job.delivery.verdict}** |`,
+          `| Commit | \`${job.delivery.head_sha}\` |`
+        ]
+      : [
+          `| Delivery | ${job.delivery.url} |`,
+          `| Commit | \`${job.delivery.headSha}\` |`
+        ]
+    : [];
   return [
     `<!-- cultos-job:${job.chainId}:${job.jobId} -->`,
     "### CultOS receipt",
@@ -84,15 +99,14 @@ function settlementReceipt(job: ReturnType<typeof getJob>, outcome: "completed" 
     `| Provider | \`${job.provider}\` |`,
     `| Result | **${outcome}** |`,
     ...(job.budget ? [`| Settlement | ${job.budget} USDC |`] : []),
-    ...(job.delivery
-      ? [`| Delivery | ${job.delivery.url} |`, `| Commit | \`${job.delivery.headSha}\` |`]
-      : [])
+    ...delivery
   ].join("\n");
 }
 
 function printJob(issue: number | string): void {
   const job = getJob(issue);
-  console.log(pc.bold(`\nCULT OS // ISSUE #${job.issueNumber}\n`));
+  const label = job.service === "review" ? "REVIEW" : "ISSUE";
+  console.log(pc.bold(`\nCULT OS // ${label} #${job.issueNumber}\n`));
   console.log(`${pc.dim("ACP JOB")}     ${job.jobId}`);
   console.log(`${pc.dim("STATUS")}      ${job.status.toUpperCase()}`);
   console.log(`${pc.dim("PROVIDER")}    ${job.provider}`);
@@ -101,7 +115,12 @@ function printJob(issue: number | string): void {
     console.log(`${pc.dim("BUDGET")}      ${job.budget} USDC`);
   }
   if (job.delivery) {
-    console.log(`${pc.dim("DELIVERY")}    ${job.delivery.url}`);
+    if (isAeonReviewDelivery(job.delivery)) {
+      console.log(`${pc.dim("VERDICT")}     ${job.delivery.verdict.toUpperCase()}`);
+      console.log(`${pc.dim("REVIEW")}      ${job.delivery.run.url}`);
+    } else {
+      console.log(`${pc.dim("DELIVERY")}    ${job.delivery.url}`);
+    }
   }
   console.log();
 }
@@ -160,27 +179,46 @@ program
   .option("-R, --repo <owner/name>", "Repository")
   .option("--platform <name>", "Repository platform: github or gitlawb")
   .option("--offering <name>", "ACP offering name")
+  .option("--pr <url>", "Pull request to review")
   .option("--chain <id>", "ACP chain ID", "8453")
   .option("--expiry <seconds>", "Custom job expiry", "86400")
   .description("Create an ACP job from an issue")
   .action((value: string, options: Record<string, string | undefined>) => {
     const repositoryPlatform = platform(options.platform);
     const number = issueReference(value, repositoryPlatform);
-    const existing = listJobs().find((job) => String(job.issueNumber) === String(number));
+    const reference = options.pr ? `${number}:review` : String(number);
+    const existing = listJobs().find((job) => jobReference(job) === reference);
     if (existing) {
       throw new Error(`Issue #${number} is already linked to ACP job ${existing.jobId}`);
     }
 
     const repository = getRepositoryInfo(options.repo, repositoryPlatform);
     const issue = getRepositoryIssue(value, options.repo, repositoryPlatform);
-    const contract = createWorkContract({
-      platform: repositoryPlatform,
-      repositoryUrl: repository.url,
-      issueUrl: issue.url,
-      baseRef: repository.defaultBranch,
-      title: issue.title,
-      body: issue.body
-    });
+    const pullRequest = options.pr ? getRepositoryPullRequest(options.pr) : undefined;
+    if (pullRequest && repositoryPlatform !== "github") {
+      throw new Error("Aeon reviews currently require GitHub");
+    }
+    if (pullRequest && !pullRequest.url.startsWith(`${repository.url}/pull/`)) {
+      throw new Error("Pull request belongs to a different repository");
+    }
+    if (pullRequest && pullRequest.state !== "OPEN") {
+      throw new Error("Pull request must be open");
+    }
+    const contract = pullRequest
+      ? createReviewContract({
+          repositoryUrl: repository.url,
+          issueUrl: issue.url,
+          pullRequestUrl: pullRequest.url,
+          headSha: pullRequest.headSha
+        })
+      : createWorkContract({
+          platform: repositoryPlatform,
+          repositoryUrl: repository.url,
+          issueUrl: issue.url,
+          baseRef: repository.defaultBranch,
+          title: issue.title,
+          body: issue.body
+        });
     const provider = options.provider;
     if (!provider) {
       throw new Error("Provider address is required");
@@ -198,6 +236,7 @@ program
 
     saveJob({
       issueNumber: issue.id,
+      ...(pullRequest ? { service: "review" as const } : {}),
       repository: repository.nameWithOwner,
       contract,
       provider,
@@ -211,7 +250,7 @@ program
     });
 
     console.log(pc.green(`ACP job ${created.jobId} created for issue #${issue.id}.`));
-    console.log(pc.dim(`Run cult watch ${issue.id} to follow it.`));
+    console.log(pc.dim(`Run cult watch ${reference} to follow it.`));
   });
 
 program
@@ -234,9 +273,14 @@ program
     }
     if (watched.deliverable) {
       try {
-        update.delivery = parsePullRequestDelivery(watched.deliverable);
+        update.delivery = job.contract.kind === "cultos.github.review.v1"
+          ? parseAeonReviewDelivery(watched.deliverable)
+          : parsePullRequestDelivery(watched.deliverable);
       } catch {
-        console.log(pc.yellow("Provider submitted a deliverable that is not a CultOS pull request."));
+        const expected = job.contract.kind === "cultos.github.review.v1"
+          ? "an Aeon review"
+          : "a CultOS pull request";
+        console.log(pc.yellow(`Provider submitted a deliverable that is not ${expected}.`));
       }
     }
 
@@ -308,10 +352,32 @@ program
 program
   .command("verify")
   .argument("<issue>", "Issue ID")
-  .description("Verify the delivered pull request")
+  .description("Verify the delivered work")
   .action((value: string) => {
     const number = value;
-    const result = verifyJob(getJob(number));
+    const job = getJob(number);
+    if (job.contract.kind === "cultos.github.review.v1") {
+      const review = verifyReviewJob(job);
+      console.log(pc.bold(`\nCULT OS // VERIFY REVIEW #${review.pullRequest}\n`));
+      console.log(`${pc.dim("VERDICT")}     ${review.verdict.toUpperCase()}`);
+      console.log(`${pc.dim("SUMMARY")}     ${review.summary}`);
+      for (const finding of review.findings) {
+        const marker = finding.severity === "medium" ? pc.yellow("●") : pc.red("●");
+        const line = finding.line ? `:${finding.line}` : "";
+        console.log(`${marker} ${finding.path}${line} ${finding.title}`);
+      }
+      if (review.passed) {
+        console.log(pc.green(`\nReview verified at ${review.headSha.slice(0, 12)}.\n`));
+        updateJob(number, { status: "verified" });
+        return;
+      }
+      console.log(pc.red("\nVerification failed:"));
+      for (const failure of review.failures) console.log(`- ${failure}`);
+      console.log();
+      process.exitCode = 1;
+      return;
+    }
+    const result = verifyJob(job);
 
     console.log(pc.bold(`\nCULT OS // VERIFY PR #${result.pullRequest}\n`));
     for (const check of result.checks) {
@@ -358,7 +424,9 @@ program
 
     if (!retryingReceipt) {
       if (options.approve) {
-        const verification = verifyJob(job, "MERGED");
+        const verification = job.contract.kind === "cultos.github.review.v1"
+          ? verifyReviewJob(job)
+          : verifyJob(job, "MERGED");
         if (!verification.passed) {
           throw new Error(`Settlement verification failed:\n- ${verification.failures.join("\n- ")}`);
         }
@@ -370,9 +438,14 @@ program
     }
 
     const repositoryPlatform = job.contract.kind === "cultos.gitlawb.issue.v1" ? "gitlawb" : "github";
-    commentOnRepositoryIssue(repositoryPlatform, job.repository, number, settlementReceipt(job, outcome));
+    commentOnRepositoryIssue(
+      repositoryPlatform,
+      job.repository,
+      job.issueNumber,
+      settlementReceipt(job, outcome)
+    );
     updateJob(number, { receiptPostedAt: new Date().toISOString() });
-    console.log(pc.green(`\nACP job ${job.jobId} ${outcome}. Receipt posted to issue #${number}.\n`));
+    console.log(pc.green(`\nACP job ${job.jobId} ${outcome}. Receipt posted to issue #${job.issueNumber}.\n`));
   });
 
 program
@@ -386,7 +459,7 @@ program
     }
     console.log(pc.bold("\nCULT OS // JOBS\n"));
     for (const job of jobs) {
-      console.log(`#${String(job.issueNumber).padEnd(6)} ${job.status.padEnd(12)} ACP ${job.jobId}`);
+      console.log(`#${jobReference(job).padEnd(13)} ${job.status.padEnd(12)} ACP ${job.jobId}`);
     }
     console.log();
   });
