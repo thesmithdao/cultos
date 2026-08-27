@@ -4,6 +4,8 @@ export const workContractKind = "cultos.github.issue.v1" as const;
 export const pullRequestDeliveryKind = "cultos.github.pull-request.v1" as const;
 export const gitlawbWorkContractKind = "cultos.gitlawb.issue.v1" as const;
 export const gitlawbPullRequestDeliveryKind = "cultos.gitlawb.pull-request.v1" as const;
+export const reviewContractKind = "cultos.github.review.v1" as const;
+export const aeonReviewSchemaKind = "cultos.aeon.review.v1" as const;
 
 export type RepositoryPlatform = "github" | "gitlawb";
 
@@ -25,10 +27,84 @@ export interface PullRequestDelivery {
   headSha: string;
 }
 
+export interface ReviewWorkContract {
+  kind: typeof reviewContractKind;
+  repository: string;
+  issue: string;
+  pullRequest: string;
+  headSha: string;
+  delivery: {
+    type: "aeon.review";
+  };
+}
+
+export interface AeonReviewDelivery {
+  schema: typeof aeonReviewSchemaKind;
+  status: "complete" | "invalid" | "unsupported";
+  repository: string;
+  issue: number;
+  pull_request: number;
+  head_sha: string;
+  verdict: "approve-ready" | "discussion-needed" | "blocked";
+  summary: string;
+  findings: Array<{
+    severity: "critical" | "high" | "medium";
+    path: string;
+    line: number | null;
+    title: string;
+    consequence: string;
+  }>;
+  reviewed_files: string[];
+  limitations: string[];
+  run: {
+    id: number;
+    url: string;
+    model: string;
+    gateway: string;
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+    };
+  };
+}
+
+export type CultWorkContract = IssueWorkContract | ReviewWorkContract;
+export type CultDelivery = PullRequestDelivery | AeonReviewDelivery;
+
 const pullRequestDeliverySchema = z.object({
   kind: z.union([z.literal(pullRequestDeliveryKind), z.literal(gitlawbPullRequestDeliveryKind)]),
   url: z.string().min(1),
   headSha: z.string().min(7)
+});
+
+const aeonReviewDeliverySchema = z.object({
+  schema: z.literal(aeonReviewSchemaKind),
+  status: z.enum(["complete", "invalid", "unsupported"]),
+  repository: z.string().min(1),
+  issue: z.number().int().positive(),
+  pull_request: z.number().int().positive(),
+  head_sha: z.string().regex(/^[0-9a-f]{40}$/),
+  verdict: z.enum(["approve-ready", "discussion-needed", "blocked"]),
+  summary: z.string().min(1).max(240),
+  findings: z.array(z.object({
+    severity: z.enum(["critical", "high", "medium"]),
+    path: z.string().min(1),
+    line: z.number().int().positive().nullable(),
+    title: z.string().min(1),
+    consequence: z.string().min(1)
+  })).max(5),
+  reviewed_files: z.array(z.string()),
+  limitations: z.array(z.string()),
+  run: z.object({
+    id: z.number().int().positive(),
+    url: z.url(),
+    model: z.string().min(1),
+    gateway: z.string().min(1),
+    usage: z.object({
+      input_tokens: z.number().int().nonnegative(),
+      output_tokens: z.number().int().nonnegative()
+    })
+  })
 });
 
 interface ContractInput {
@@ -97,6 +173,22 @@ export function createWorkContract(input: ContractInput): IssueWorkContract {
   };
 }
 
+export function createReviewContract(input: {
+  repositoryUrl: string;
+  issueUrl: string;
+  pullRequestUrl: string;
+  headSha: string;
+}): ReviewWorkContract {
+  return {
+    kind: reviewContractKind,
+    repository: input.repositoryUrl,
+    issue: input.issueUrl,
+    pullRequest: input.pullRequestUrl,
+    headSha: input.headSha,
+    delivery: { type: "aeon.review" }
+  };
+}
+
 export function createPullRequestDelivery(
   url: string,
   headSha: string,
@@ -112,4 +204,13 @@ export function createPullRequestDelivery(
 export function parsePullRequestDelivery(value: unknown): PullRequestDelivery {
   const input = typeof value === "string" ? JSON.parse(value) : value;
   return pullRequestDeliverySchema.parse(input);
+}
+
+export function parseAeonReviewDelivery(value: unknown): AeonReviewDelivery {
+  const input = typeof value === "string" ? JSON.parse(value) : value;
+  return aeonReviewDeliverySchema.parse(input);
+}
+
+export function isAeonReviewDelivery(value: CultDelivery): value is AeonReviewDelivery {
+  return "schema" in value && value.schema === aeonReviewSchemaKind;
 }
