@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CultJob } from "../src/state.js";
-import { evaluateDelivery } from "../src/verify.js";
+import { evaluateDelivery, evaluateReviewDelivery } from "../src/verify.js";
 
 const job: CultJob = {
   issueNumber: 42,
@@ -127,5 +127,80 @@ describe("evaluateDelivery", () => {
     );
 
     expect(result.failures).toContain("Pull request has no CI checks");
+  });
+});
+
+describe("evaluateReviewDelivery", () => {
+  const reviewJob: CultJob = {
+    issueNumber: 42,
+    service: "review",
+    repository: "thecultos/example",
+    contract: {
+      kind: "cultos.github.review.v1",
+      repository: "https://github.com/thecultos/example",
+      issue: "https://github.com/thecultos/example/issues/42",
+      pullRequest: "https://github.com/thecultos/example/pull/47",
+      headSha: "a".repeat(40),
+      delivery: { type: "aeon.review" }
+    },
+    provider: "0x1234",
+    jobId: "814",
+    chainId: 8453,
+    status: "submitted",
+    delivery: {
+      schema: "cultos.aeon.review.v1",
+      status: "complete",
+      repository: "thecultos/example",
+      issue: 42,
+      pull_request: 47,
+      head_sha: "a".repeat(40),
+      verdict: "blocked",
+      summary: "A material defect was found.",
+      findings: [{
+        severity: "high",
+        path: "src/index.ts",
+        line: 12,
+        title: "Incorrect branch",
+        consequence: "The wrong state is returned."
+      }],
+      reviewed_files: ["src/index.ts"],
+      limitations: [],
+      run: {
+        id: 91,
+        url: "https://github.com/cultosdev/aeon/actions/runs/91",
+        model: "anthropic/claude-sonnet-4",
+        gateway: "openrouter",
+        usage: { input_tokens: 10, output_tokens: 20 }
+      }
+    },
+    createdAt: "2026-08-26T12:00:00.000Z",
+    updatedAt: "2026-08-26T12:00:00.000Z"
+  };
+
+  it("verifies a blocked review at the declared commit", () => {
+    const result = evaluateReviewDelivery(reviewJob, {
+      number: 47,
+      url: "https://github.com/thecultos/example/pull/47",
+      state: "OPEN",
+      headSha: "a".repeat(40),
+      baseRef: "main"
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.verdict).toBe("blocked");
+    expect(result.findings).toHaveLength(1);
+  });
+
+  it("rejects a review after the pull request changes", () => {
+    const result = evaluateReviewDelivery(reviewJob, {
+      number: 47,
+      url: "https://github.com/thecultos/example/pull/47",
+      state: "OPEN",
+      headSha: "b".repeat(40),
+      baseRef: "main"
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.failures).toContain("Pull request changed after review");
   });
 });

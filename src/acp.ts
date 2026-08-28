@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { z } from "zod";
-import type { IssueWorkContract, PullRequestDelivery } from "./contract.js";
+import type { CultWorkContract, PullRequestDelivery } from "./contract.js";
 
 const createJobSchema = z.object({
   jobId: z.union([z.string(), z.number()]),
@@ -39,7 +39,7 @@ interface CreateJobInput {
   offering?: string;
   chainId: number;
   expiry: number;
-  contract: IssueWorkContract;
+  contract: CultWorkContract;
 }
 
 function parseOutput(output: string): unknown {

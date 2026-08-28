@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { parseCultState, writeStateFile, type CultState } from "../src/state.js";
+import { jobReference, parseCultState, writeStateFile, type CultState } from "../src/state.js";
 
 const state: CultState = {
   version: 1,
@@ -23,5 +23,10 @@ describe("local job state", () => {
     expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(state);
+  });
+
+  test("keeps work and review jobs separate", () => {
+    expect(jobReference({ issueNumber: 42 })).toBe("42");
+    expect(jobReference({ issueNumber: 42, service: "review" })).toBe("42:review");
   });
 });
