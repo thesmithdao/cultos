@@ -63,6 +63,22 @@ describe("evaluateDelivery", () => {
     expect(result.failures).toContain("test: fail");
   });
 
+  it("rejects a pull request URL outside the repository route", () => {
+    const result = evaluateDelivery(
+      job,
+      {
+        number: 47,
+        url: "https://github.com/thecultos/example/pull/47/commits",
+        state: "OPEN",
+        headSha: "abc123456789",
+        baseRef: "main"
+      },
+      [{ name: "test", state: "SUCCESS", bucket: "pass" }]
+    );
+
+    expect(result.failures).toContain("Pull request belongs to a different repository");
+  });
+
   it("explains that verification runs before merge", () => {
     const result = evaluateDelivery(
       job,

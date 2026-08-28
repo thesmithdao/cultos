@@ -15,6 +15,11 @@ export interface VerificationResult {
   failures: string[];
 }
 
+function isPullRequestUrl(repository: string, pullRequest: string): boolean {
+  const escapedRepository = repository.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escapedRepository}/pull/[1-9]\\d*$`).test(pullRequest);
+}
+
 export function evaluateDelivery(
   job: CultJob,
   pullRequest: RepositoryPullRequest,
@@ -25,9 +30,7 @@ export function evaluateDelivery(
     throw new Error("The provider has not submitted a pull-request delivery");
   }
   const failures: string[] = [];
-  const repositoryPrefix = `${job.contract.repository}/pull`;
-
-  if (!pullRequest.url.startsWith(repositoryPrefix)) {
+  if (!isPullRequestUrl(job.contract.repository, pullRequest.url)) {
     failures.push("Pull request belongs to a different repository");
   }
   if (pullRequest.baseRef !== job.contract.baseRef) {
