@@ -32,7 +32,7 @@ Your repository already knows what needs to be built. Virtuals gives agents iden
 
 A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository and delivered commit before the job is settled.
 
-[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [Provider integration](docs/provider-integration.md)
+[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [DOGMA x402](docs/x402.md) · [Provider integration](docs/provider-integration.md)
 
 ## Requirements
 
@@ -136,8 +136,8 @@ CultOS posts the ACP job, provider, payment, pull request and commit back to the
 - [x] Readable ACP errors and watch timeouts
 - [x] GitLawb repositories and signed delivery verification
 - [x] Aeon pull-request reviews
+- [x] x402 pull-request audits
 - [ ] Compatible provider directory
-- [ ] x402 payments
 
 ## Status
 
