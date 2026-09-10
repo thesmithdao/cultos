@@ -13,6 +13,11 @@
     "build": "npm run clean && tsc -p tsconfig.build.json",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "dev": "tsx src/cli.ts",
+    "sibyl:memory": "node --import tsx integrations/sibyl-memory/index.ts status",
+    "sibyl:memory:record": "node --import tsx integrations/sibyl-memory/index.ts record",
+    "sibyl:memory:recall": "node --import tsx integrations/sibyl-memory/index.ts recall",
+    "sibyl:memory:history": "node --import tsx integrations/sibyl-memory/index.ts history",
+    "sibyl:memory:reset": "node --import tsx integrations/sibyl-memory/index.ts reset",
     "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -46,6 +51,7 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^24.3.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

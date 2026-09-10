@@ -1,0 +1,14 @@
+{
+  "commit": "2222222222222222222222222222222222222222",
+  "pullRequest": {
+    "number": 1,
+    "url": "https://github.com/cultosagent/review-lab/pull/1",
+    "headSha": "2222222222222222222222222222222222222222",
+    "baseRef": "main",
+    "state": "OPEN",
+    "platform": "github"
+  },
+  "checks": [
+    { "name": "required-ci", "state": "SUCCESS", "bucket": "pass" }
+  ]
+}

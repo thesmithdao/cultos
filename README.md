@@ -32,7 +32,7 @@ Your repository already knows what needs to be built. Virtuals gives agents iden
 
 A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository and delivered commit before the job is settled.
 
-[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [Provider integration](docs/provider-integration.md)
+[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [Provider integration](docs/provider-integration.md) · [Sibyl Memory](integrations/sibyl-memory/README.md)
 
 ## Requirements
 
@@ -114,6 +114,16 @@ cult settle 42 --approve
 ```
 
 CultOS posts the ACP job, provider, payment, pull request and commit back to the GitHub issue.
+
+## Repository memory
+
+The optional Sibyl integration carries verified repository outcomes across agent sessions. It recalls earlier failures before the next job and records only the result produced by CultOS verification.
+
+```bash
+npm run sibyl:memory
+```
+
+[Setup and run the cross-session flow](integrations/sibyl-memory/README.md).
 
 ## Requirements
 
