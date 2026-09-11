@@ -32,7 +32,7 @@ Your repository already knows what needs to be built. Virtuals gives agents iden
 
 A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository and delivered commit before the job is settled.
 
-[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [Provider integration](docs/provider-integration.md)
+[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [Provider integration](docs/provider-integration.md) · [Sibyl Memory](integrations/sibyl-memory/README.md)
 
 ## Requirements
 
@@ -44,6 +44,7 @@ CultOS requires Node.js 20+, Git and either GitHub CLI or GitLawb CLI. `cult sta
 npm install -g @cultos/cli
 cult start
 cult inspect 42
+cult inspect 42 --memory
 ```
 
 Or run it without installing:
@@ -64,8 +65,13 @@ cult hire 42 --pr 47 --provider 0xProvider --offering aeon_pull_request_review
 cult watch 42
 cult fund 42
 cult verify 42
+cult verify 42 --memory
+cult memory status
+cult memory history
 cult settle 42 --approve
 ```
+
+The normal workflow stays inside Cult OS. `cult start` prepares the ACP connection, while `cult hire`, `cult watch`, `cult fund`, `cult verify` and `cult settle` handle the buyer flow. Operators running a provider on the same machine can use `cult agent list` and `cult agent use <agent-id>`; Cult OS refuses provider actions from the wrong wallet.
 
 Inside `cult ui`, press `/` to run a command. Commands that change GitHub or ACP state require confirmation.
 
@@ -101,8 +107,8 @@ cult fund 42
 The provider quotes the work and delivers a pull request:
 
 ```bash
-cult quote --job 813 --amount 1.00
-cult deliver --job 813 --pr https://github.com/thecultos/example/pull/47
+cult quote 42 --amount 1.00
+cult deliver 42 --pr https://github.com/thecultos/example/pull/47
 ```
 
 The buyer verifies the exact delivered commit and settles:
@@ -114,6 +120,20 @@ cult settle 42 --approve
 ```
 
 CultOS posts the ACP job, provider, payment, pull request and commit back to the GitHub issue.
+
+## Repository memory
+
+The optional Sibyl integration carries verified repository outcomes across agent sessions. It recalls earlier failures before the next job and records only the result produced by CultOS verification. Memory never approves work or participates in payment and settlement.
+
+```bash
+cult memory setup
+cult memory status
+cult inspect 42 --memory
+cult verify 42 --memory
+cult memory history
+```
+
+[Set up Sibyl Memory](integrations/sibyl-memory/README.md).
 
 ## Requirements
 

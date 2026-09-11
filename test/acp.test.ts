@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createJob, fundJob, watchJob } from "../src/acp.js";
+import { createJob, currentAgent, fundJob, listAgents, requireProviderIdentity, useAgent, watchJob } from "../src/acp.js";
 
 let directory: string;
 let previousPath: string | undefined;
@@ -16,6 +16,12 @@ beforeEach(() => {
     [
       "#!/bin/sh",
       "case \"$*\" in",
+      "  *job\\ history*--job-id\\ 814*) echo '{\"jobId\":\"814\",\"chainId\":8453,\"status\":\"budget_set\",\"entries\":[{\"event\":{\"type\":\"budget.set\",\"amount\":0.01}},{\"kind\":\"message\",\"content\":\"Waiting for payment\"}]}' ; exit 0 ;;",
+      "  *job\\ history*--job-id\\ 815*) echo '{\"jobId\":\"815\",\"chainId\":8453,\"status\":\"submitted\",\"entries\":[{\"event\":{\"type\":\"budget.set\",\"amount\":0.01}},{\"event\":{\"type\":\"job.submitted\",\"deliverable\":\"real-delivery-reference\"}},{\"kind\":\"message\",\"content\":\"Done\"}]}' ; exit 0 ;;",
+      "  *job\\ history*) echo '{\"jobId\":\"813\",\"chainId\":8453,\"status\":\"open\",\"entries\":[]}' ; exit 0 ;;",
+      "  *agent\\ list*) echo '{\"data\":[{\"id\":\"buyer-id\",\"name\":\"Buyer\",\"walletAddress\":\"0x1111111111111111111111111111111111111111\"},{\"id\":\"provider-id\",\"name\":\"Provider\",\"walletAddress\":\"0x2222222222222222222222222222222222222222\"}]}' ; exit 0 ;;",
+      "  *agent\\ whoami*) echo '{\"id\":\"buyer-id\",\"name\":\"Buyer\",\"walletAddress\":\"0x1111111111111111111111111111111111111111\"}' ; exit 0 ;;",
+      "  *agent\\ use*) echo '{\"success\":true}' ; exit 0 ;;",
       "  *create-custom-job*) echo '{\"jobId\":813,\"chainId\":8453,\"protocol\":\"v2\"}' ; exit 0 ;;",
       "  *job\\ watch*--timeout\\ 30*) echo '{\"status\":\"budget_set\",\"availableTools\":[\"fund\"]}' ; exit 0 ;;",
       "  *job\\ watch*--timeout\\ 31*) echo 'Watching job 813...' ; exit 4 ;;",
@@ -64,6 +70,23 @@ describe("ACP adapter", () => {
     expect(job.availableTools).toEqual(["fund"]);
   });
 
+  it("recovers an existing quote even when a message followed it", () => {
+    const job = watchJob("814", 1);
+    expect(job.status).toBe("budget_set");
+    expect(job.budget).toBe("0.01");
+  });
+
+  it("recovers a submitted delivery and earlier quote across sessions", () => {
+    const job = watchJob("815", 1);
+    expect(job.status).toBe("submitted");
+    expect(job.budget).toBe("0.01");
+    expect(job.deliverable).toBe("real-delivery-reference");
+  });
+
+  it("rejects history from a different chain", () => {
+    expect(() => watchJob("814", 1, 84532)).toThrow("different job or chain");
+  });
+
   it("passes an optional watch timeout", () => {
     const job = watchJob("813", 30);
 
@@ -78,5 +101,23 @@ describe("ACP adapter", () => {
     expect(() => fundJob("813", 8453, "1.00")).toThrow(
       "Insufficient balance. Top up your wallet"
     );
+  });
+
+  it("lists, reads and switches ACP agents", () => {
+    expect(listAgents().map(agent => agent.id)).toEqual(["buyer-id", "provider-id"]);
+    expect(currentAgent().walletAddress).toBe("0x1111111111111111111111111111111111111111");
+    expect(useAgent("provider-id").id).toBe("buyer-id");
+  });
+
+  it("accepts exact agent names case-insensitively and refuses unknown names", () => {
+    expect(useAgent("buyer").id).toBe("buyer-id");
+    expect(() => useAgent("unknown")).toThrow("Agent not found");
+  });
+
+  it("refuses a provider action from the wrong active wallet", () => {
+    expect(() => requireProviderIdentity("0x2222222222222222222222222222222222222222")).toThrow(
+      "Run cult agent use provider-id"
+    );
+    expect(requireProviderIdentity("0x1111111111111111111111111111111111111111").id).toBe("buyer-id");
   });
 });

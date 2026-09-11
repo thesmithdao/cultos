@@ -4,12 +4,11 @@ const ESC = "\u001b[";
 
 const color = {
   reset: `${ESC}0m`,
-  blue: `${ESC}48;2;10;38;170m`,
-  red: `${ESC}48;2;178;24;18m`,
-  cyan: `${ESC}48;2;72;196;205m`,
-  black: `${ESC}38;2;4;16;24m`,
-  white: `${ESC}38;2;245;247;255m`,
-  yellow: `${ESC}38;2;255;242;76m`
+  panel: `${ESC}48;2;12;12;12m`,
+  inverse: `${ESC}48;2;232;232;228m`,
+  ink: `${ESC}38;2;232;232;228m`,
+  inverseInk: `${ESC}38;2;12;12;12m`,
+  muted: `${ESC}38;2;150;150;146m`
 };
 
 interface DeckCommand {
@@ -21,22 +20,29 @@ interface DeckCommand {
 }
 
 const commands: DeckCommand[] = [
+  { command: "help", phase: "GUIDE", role: "Either", description: "List CLI commands.", next: "Choose the command for the work you want to perform." },
   { command: "doctor", phase: "CHECK", role: "Maintainer", description: "Check repo + ACP.", next: "Resolve missing checks, then inspect an issue." },
-  { command: "inspect <issue>", phase: "PLAN", role: "Maintainer", description: "Create work contract", next: "Review the contract, then choose a provider." },
+  { command: "inspect <issue> [--memory]", phase: "PLAN", role: "Maintainer", description: "Create work contract", next: "Review the contract, then choose a provider." },
   { command: "hire <issue> --provider <address>", phase: "HIRE", role: "Maintainer", description: "Open a provider job.", next: "Watch the job for the provider quote." },
   { command: "watch <issue>", phase: "SYNC", role: "Either", description: "Read job updates.", next: "Take the action shown by the latest job event." },
   { command: "fund <issue>", phase: "PAY", role: "Maintainer", description: "Fund quote.", next: "Watch the funded job for delivery." },
   { command: "message <issue> <text>", phase: "COMMS", role: "Either", description: "Message provider.", next: "Watch for the other party's response." },
-  { command: "quote --job <id> --amount <usdc>", phase: "PROVIDER", role: "Provider", description: "Set provider price.", next: "Wait for the maintainer to fund the quote." },
-  { command: "deliver --job <id> --pr <url>", phase: "PROVIDER", role: "Provider", description: "Submit a PR.", next: "Wait for verification and maintainer review." },
-  { command: "verify <issue>", phase: "VERIFY", role: "Maintainer", description: "Check delivery.", next: "Review and merge the verified pull request." },
+  { command: "quote <issue> --amount <usdc>", phase: "PROVIDER", role: "Provider", description: "Set provider price.", next: "Wait for the maintainer to fund the quote." },
+  { command: "deliver <issue> --pr <url>", phase: "PROVIDER", role: "Provider", description: "Submit a PR.", next: "Wait for verification and maintainer review." },
+  { command: "verify <issue> [--memory]", phase: "VERIFY", role: "Maintainer", description: "Check delivery.", next: "Review and merge the verified pull request." },
   { command: "settle <issue> --approve", phase: "SETTLE", role: "Maintainer", description: "Release payment.", next: "CultOS posts the settlement receipt to the issue." },
   { command: "settle <issue> --reject", phase: "REJECT", role: "Maintainer", description: "Reject with receipt.", next: "Review the receipt and close the issue if needed." },
-  { command: "jobs", phase: "INDEX", role: "Either", description: "List repo jobs.", next: "Open the relevant issue or continue its workflow." }
+  { command: "jobs", phase: "INDEX", role: "Either", description: "List repo jobs.", next: "Open the relevant issue or continue its workflow." },
+  { command: "memory history", phase: "MEMORY", role: "Either", description: "Read repo memory.", next: "Use relevant outcomes while inspecting the next issue." }
 ];
 
 const commandNames = new Set(commands.map((item) => item.command.split(" ")[0]));
+const hiddenCommandNames = new Set(["agent"]);
 const mutatingCommands = new Set(["hire", "fund", "message", "quote", "deliver", "settle"]);
+
+function mutates(args: string[]): boolean {
+  return mutatingCommands.has(args[0]!) || (args[0] === "agent" && args[1] === "use");
+}
 
 function commandAt(index: number): DeckCommand {
   return commands[index] ?? commands[0]!;
@@ -61,9 +67,9 @@ function row(value: string, width: number): string {
   return `│ ${fit(value, width - 3)}│`;
 }
 
-function blueRow(value: string, width: number): string {
-  const painted = value.split(color.reset).join(`${color.reset}${color.blue}${color.white}`);
-  return `${color.blue}${color.white}${row(painted, width)}${color.reset}`;
+function panelRow(value: string, width: number): string {
+  const painted = value.split(color.reset).join(`${color.reset}${color.panel}${color.ink}`);
+  return `${color.panel}${color.ink}${row(painted, width)}${color.reset}`;
 }
 
 function bar(value: string, background: string, foreground: string, width: number): string {
@@ -71,10 +77,10 @@ function bar(value: string, background: string, foreground: string, width: numbe
 }
 
 function header(width: number, label: string): string {
-  const left = " ╡ CULT OS ╞  GITHUB WORK FOR THE AGENT ECONOMY ";
+  const left = " CULT OS / REPOSITORY WORK ";
   const right = ` ${label} `;
   const space = " ".repeat(Math.max(1, width - left.length - right.length));
-  return `${color.red}${color.yellow}${left}${space}${color.cyan}${color.black}${right}${color.reset}`;
+  return `${color.panel}${color.ink}${left}${space}${color.muted}${right}${color.reset}`;
 }
 
 function frame(lines: string[], footer: string, width: number, height: number, label: string): string {
@@ -84,11 +90,11 @@ function frame(lines: string[], footer: string, width: number, height: number, l
 
   return [
     header(width, label),
-    `${color.blue}${color.white}┌${"─".repeat(width - 2)}┐${color.reset}`,
-    ...content.map((line) => blueRow(line, width)),
-    `${color.blue}${color.white}└${"─".repeat(width - 2)}┘${color.reset}`,
-    bar(footer, color.cyan, color.black, width),
-    bar(" npm install -g @cultos/cli ", color.blue, color.yellow, width)
+    `${color.panel}${color.ink}┌${"─".repeat(width - 2)}┐${color.reset}`,
+    ...content.map((line) => panelRow(line, width)),
+    `${color.panel}${color.ink}└${"─".repeat(width - 2)}┘${color.reset}`,
+    bar(footer, color.inverse, color.inverseInk, width),
+    bar(" @cultos/cli ", color.panel, color.muted, width)
   ].join("\n");
 }
 
@@ -146,17 +152,18 @@ export function validateCommand(args: string[]): string | undefined {
   const name = args[0];
   if (!name) return "Type a CultOS command";
   if (name === "cult") return "Enter the command without the cult prefix";
-  if (!commandNames.has(name) || name === "ui") return `Unknown CultOS command: ${name}`;
+  if ((!commandNames.has(name) && !hiddenCommandNames.has(name)) || name === "ui") {
+    return `Unknown CultOS command: ${name}`;
+  }
   return undefined;
 }
 
 export function renderDeck(selected = 0, columns = 94, rows = 23): string {
   const width = Math.max(79, Math.min(columns, 100));
   const list = commands.map((item, index) => {
-    const cursor = index === selected ? `${color.yellow}▶${color.reset}` : " ";
-    const number = `${color.yellow}[${String(index + 1).padStart(2, "0")}]${color.reset}`;
+    const cursor = index === selected ? `${color.inverse}${color.inverseInk}>${color.reset}` : " ";
     const description = fit(item.description, Math.max(8, width - 59));
-    return `${cursor} ${number} ${fit(item.command, 35)} │ ${color.cyan}${color.black}${fit(item.phase, 8)} ${color.reset}${color.blue}${color.white}│ ${description}`;
+    return `${cursor} ${fit(item.command, 40)} │ ${color.muted}${fit(item.phase, 8)} ${color.reset}${color.panel}${color.ink}│ ${description}`;
   });
 
   return frame([
@@ -164,15 +171,35 @@ export function renderDeck(selected = 0, columns = 94, rows = 23): string {
     "",
     ...list,
     "",
-    `${color.yellow}Type / to start${color.white}`
+    `${color.muted}Type / to start${color.ink}`
   ], " ↑↓ SELECT   ENTER OPEN   / COMMAND   Q QUIT ", width, rows, "TERMINAL");
 }
 
 export function renderCommand(selected = 0, columns = 94, rows = 23): string {
   const width = Math.max(72, Math.min(columns, 100));
   const item = commandAt(selected);
+  if (item.phase === "MEMORY") {
+    return frame([
+      "SIBYL MEMORY // LOCAL",
+      "",
+      "SET UP",
+      "cult memory setup",
+      "",
+      "CHECK",
+      "cult memory status",
+      "",
+      "RECALL BEFORE WORK",
+      "cult inspect <issue> --memory",
+      "",
+      "RECORD AFTER DELIVERY",
+      "cult verify <issue> --memory",
+      "",
+      "READ HISTORY",
+      "cult memory history"
+    ], " ESC BACK   ↑↓ NEXT COMMAND   Q QUIT ", width, rows, "MEMORY");
+  }
   return frame([
-    `${color.yellow}${item.phase}${color.white} // ${item.role.toUpperCase()}`,
+    `${color.ink}${item.phase} // ${item.role.toUpperCase()}`,
     "",
     `cult ${item.command}`,
     "",
@@ -188,14 +215,8 @@ export function renderCommand(selected = 0, columns = 94, rows = 23): string {
 export function renderPrompt(value = "", error = "", columns = 94, rows = 23): string {
   const width = Math.max(72, Math.min(columns, 100));
   return frame([
-    `${color.yellow}cult >${color.white} ${value}`,
-    "",
-    ...(error ? [`${color.yellow}${error}${color.white}`] : ["Type a command without the cult prefix."]),
-    "",
-    "Examples",
-    "doctor",
-    "inspect 12",
-    "message 12 \"Please include tests\""
+    `${color.ink}cult > ${value}`,
+    ...(error ? ["", `${color.ink}${error}`] : [])
   ], " ENTER RUN   ESC CANCEL   BACKSPACE EDIT ", width, rows, "COMMAND");
 }
 
@@ -215,7 +236,7 @@ export function renderRunning(
       ? "WATCHING"
       : "RUNNING";
   const fixedLines = [
-    `${color.yellow}${status}${color.white} · ${elapsedSeconds}s`,
+    `${color.ink}${status} · ${elapsedSeconds}s`,
     "",
     `cult ${command}`,
     ""
@@ -232,7 +253,7 @@ export function renderRunning(
 export function renderConfirmation(value: string, columns = 94, rows = 23): string {
   const width = Math.max(72, Math.min(columns, 100));
   return frame([
-    `${color.yellow}CONFIRM STATE CHANGE${color.white}`,
+    `${color.ink}CONFIRM STATE CHANGE`,
     "",
     `cult ${value}`,
     "",
@@ -243,7 +264,7 @@ export function renderConfirmation(value: string, columns = 94, rows = 23): stri
 
 function resultLines(value: string, exitCode: number, width: number): string[] {
   return [
-    ...(exitCode === 0 ? [] : [`${color.yellow}FAILED · EXIT ${exitCode}${color.white}`, ""]),
+    ...(exitCode === 0 ? [] : [`${color.ink}FAILED · EXIT ${exitCode}`, ""]),
     ...wrap(value || "Command completed without output.", width - 4)
   ];
 }
@@ -371,7 +392,7 @@ export function runBbs(): void {
     runningSince = Date.now();
     render();
 
-    const execution = spawn(process.execPath, [process.argv[1]!, ...args], {
+    const execution = spawn(process.execPath, [...process.execArgv, process.argv[1]!, ...args], {
       cwd: process.cwd(),
       env: process.env,
       detached: process.platform !== "win32",
@@ -414,7 +435,7 @@ export function runBbs(): void {
       const args = parseCommandLine(commandLine);
       promptError = validateCommand(args) ?? "";
       if (promptError) return;
-      mode = mutatingCommands.has(args[0]!) ? "confirm" : "prompt";
+      mode = mutates(args) ? "confirm" : "prompt";
       if (mode === "prompt") execute();
     } catch (error) {
       promptError = error instanceof Error ? error.message : String(error);

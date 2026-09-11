@@ -1,0 +1,9 @@
+# Changelog
+
+## 0.4.0
+
+Cult OS now supports optional repository memory through Sibyl. Run `cult memory setup`, use `cult inspect <issue> --memory` to recall prior outcomes, and `cult verify <issue> --memory` to record verification results for later sessions. Memory does not authorize payments or settlement. Setup requires Python 3.10 or newer on macOS, Linux or WSL2; ordinary CLI commands do not require Python.
+
+The terminal uses a monochrome layout with a streamlined command prompt and memory instructions. ACP agents can be selected by exact name or ID with `cult agent use`. Quote and delivery commands accept local issue numbers while retaining the remote `--job` option.
+
+Job watching recovers existing quotes and deliveries from ACP history. Settlement receipts target the job's recorded repository. The terminal preserves the development loader when launching commands, and builds preserve the CLI executable permission.
