@@ -161,8 +161,12 @@ export function getPullRequestChecks(reference: string): GitHubCheck[] {
   return checks;
 }
 
-export function commentOnIssue(issueNumber: number, body: string): void {
-  const result = spawnSync("gh", ["issue", "comment", String(issueNumber), "--body", body], {
+export function commentOnIssue(issueNumber: number, body: string, repository?: string): void {
+  const args = ["issue", "comment", String(issueNumber), "--body", body];
+  if (repository) {
+    args.push("--repo", repository);
+  }
+  const result = spawnSync("gh", args, {
     encoding: "utf8"
   });
 

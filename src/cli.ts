@@ -6,11 +6,15 @@ import { Command } from "commander";
 import {
   completeJob,
   createJob,
+  currentAgent,
   fundJob,
+  listAgents,
   quoteJob,
   rejectJob,
+  requireProviderIdentity,
   sendMessage,
   submitJob,
+  useAgent,
   watchJob
 } from "./acp.js";
 import {
@@ -74,6 +78,33 @@ function positiveInteger(value: string, name: string): number {
     throw new Error(`Invalid ${name}: ${value}`);
   }
   return parsed;
+}
+
+function printAgentIdentity(agent: ReturnType<typeof currentAgent>, active = false): void {
+  console.log(`${active ? pc.green("◆") : pc.dim("◇")} ${agent.name}`);
+  console.log(`  ${agent.walletAddress}`);
+  console.log(pc.dim(`  ${agent.id}`));
+}
+
+function providerIdentity(jobId: string, network: number): ReturnType<typeof currentAgent> {
+  const local = listJobs().find(job => job.jobId === jobId && job.chainId === network);
+  return requireProviderIdentity(local?.provider);
+}
+
+function providerAction(
+  issue: string | undefined,
+  options: { job?: string; chain?: string }
+): { jobId: string; network: number } {
+  if (issue && options.job) throw new Error("Choose an issue or --job, not both");
+  if (issue) {
+    const job = getJob(issue);
+    if (options.chain && chainId(options.chain) !== job.chainId) {
+      throw new Error(`Issue ${issue} is recorded on chain ${job.chainId}`);
+    }
+    return { jobId: job.jobId, network: job.chainId };
+  }
+  if (!options.job) throw new Error("Provide an issue or --job");
+  return { jobId: options.job, network: chainId(options.chain ?? "8453") };
 }
 
 function settlementReceipt(job: ReturnType<typeof getJob>, outcome: "completed" | "rejected"): string {
@@ -141,8 +172,9 @@ program
   .argument("<issue>", "Issue ID or URL")
   .option("-R, --repo <owner/name>", "Repository")
   .option("--platform <name>", "Repository platform: github or gitlawb")
+  .option("--memory", "Recall verified repository history through Sibyl")
   .description("Build a Cult Work Contract from an issue")
-  .action((reference: string, options: { repo?: string; platform?: string }) => {
+  .action(async (reference: string, options: { repo?: string; platform?: string; memory?: boolean }) => {
     const repositoryPlatform = platform(options.platform);
     const repository = getRepositoryInfo(options.repo, repositoryPlatform);
     const issue = getRepositoryIssue(reference, options.repo, repositoryPlatform);
@@ -159,6 +191,25 @@ program
     console.log(issue.title);
     console.log(pc.dim(`\n${repository.nameWithOwner}\n`));
 
+    if (options.memory) {
+      try {
+        const { createRepositoryMemory } = await import("./memory.js");
+        const memory = await createRepositoryMemory().recall(repository.nameWithOwner, repositoryPlatform);
+        if (memory?.history.length) {
+          console.log(pc.bold("Repository memory (data only)"));
+          for (const outcome of memory.history.slice(-5)) {
+            const marker = outcome.verification === "verified" ? pc.green("●") : pc.yellow("●");
+            const detail = outcome.failures[0] ?? "required checks passed";
+            console.log(`${marker} ${outcome.pinnedCommit.slice(0, 12)} ${detail}`);
+          }
+          console.log();
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unavailable";
+        console.warn(pc.yellow(`Sibyl Memory unavailable: ${message}`));
+      }
+    }
+
     if (contract.acceptanceCriteria.length > 0) {
       console.log(pc.bold("Acceptance criteria"));
       for (const criterion of contract.acceptanceCriteria) {
@@ -169,6 +220,34 @@ program
 
     console.log(pc.bold("Cult Work Contract\n"));
     console.log(JSON.stringify(contract, null, 2));
+    console.log();
+  });
+
+const agent = program.command("agent").description("Inspect or switch the active ACP agent");
+
+agent.command("list").description("List available ACP agents").action(() => {
+  const active = currentAgent();
+  console.log(pc.bold("\nCULT OS // ACP AGENTS\n"));
+  for (const item of listAgents()) {
+    printAgentIdentity(item, item.id === active.id);
+    console.log();
+  }
+});
+
+agent.command("current").description("Show the active ACP agent").action(() => {
+  console.log(pc.bold("\nCULT OS // ACTIVE AGENT\n"));
+  printAgentIdentity(currentAgent(), true);
+  console.log();
+});
+
+agent
+  .command("use")
+  .argument("<agent>", "ACP agent ID or exact name (quote names containing spaces)")
+  .description("Switch the active ACP agent")
+  .action((agentId: string) => {
+    const selected = useAgent(agentId);
+    console.log(pc.bold("\nCULT OS // ACTIVE AGENT\n"));
+    printAgentIdentity(selected, true);
     console.log();
   });
 
@@ -264,7 +343,8 @@ program
     console.log(pc.dim(`Watching ACP job ${job.jobId}...`));
     const watched = watchJob(
       job.jobId,
-      options.timeout ? positiveInteger(options.timeout, "timeout") : undefined
+      options.timeout ? positiveInteger(options.timeout, "timeout") : undefined,
+      job.chainId
     );
     const update: Parameters<typeof updateJob>[1] = { status: watched.status };
 
@@ -286,9 +366,14 @@ program
 
     updateJob(number, update);
     printJob(number);
-    if (watched.availableTools.length > 0) {
-      console.log(pc.dim(`Available: ${watched.availableTools.join(", ")}\n`));
-    }
+    const next = watched.status === "budget_set"
+      ? `Buyer: run cult fund ${number}.`
+      : watched.status === "submitted"
+        ? `Buyer: run cult verify ${number} --memory.`
+        : watched.status === "open"
+          ? "Waiting for the provider quote."
+          : watched.status === "funded" ? "Waiting for the provider delivery." : undefined;
+    if (next) console.log(pc.dim(`${next}\n`));
   });
 
 program
@@ -323,37 +408,46 @@ program
 
 program
   .command("quote")
-  .requiredOption("--job <id>", "ACP job ID")
+  .argument("[issue]", "Issue ID recorded by Cult OS")
+  .option("--job <id>", "ACP job ID for a remote provider")
   .requiredOption("--amount <usdc>", "Service price in USDC")
-  .option("--chain <id>", "ACP chain ID", "8453")
+  .option("--chain <id>", "ACP chain ID")
   .description("Set a provider quote for an ACP job")
-  .action((options: { job: string; amount: string; chain: string }) => {
-    quoteJob(options.job, chainId(options.chain), options.amount);
-    console.log(pc.green(`\nQuoted ${options.amount} USDC for ACP job ${options.job}.\n`));
+  .action((issue: string | undefined, options: { job?: string; amount: string; chain?: string }) => {
+    const { jobId, network } = providerAction(issue, options);
+    const identity = providerIdentity(jobId, network);
+    console.log(pc.dim(`Provider identity: ${identity.name} · ${identity.walletAddress}`));
+    quoteJob(jobId, network, options.amount);
+    console.log(pc.green(`\nQuoted ${options.amount} USDC for ACP job ${jobId}.\n`));
   });
 
 program
   .command("deliver")
-  .requiredOption("--job <id>", "ACP job ID")
+  .argument("[issue]", "Issue ID recorded by Cult OS")
+  .option("--job <id>", "ACP job ID for a remote provider")
   .requiredOption("--pr <url>", "Delivered pull request")
-  .option("--chain <id>", "ACP chain ID", "8453")
+  .option("--chain <id>", "ACP chain ID")
   .description("Submit a pull request as an ACP provider")
-  .action((options: { job: string; pr: string; chain: string }) => {
+  .action((issue: string | undefined, options: { job?: string; pr: string; chain?: string }) => {
+    const { jobId, network } = providerAction(issue, options);
+    const identity = providerIdentity(jobId, network);
+    console.log(pc.dim(`Provider identity: ${identity.name} · ${identity.walletAddress}`));
     const pullRequest = getRepositoryPullRequest(options.pr);
     const delivery = createPullRequestDelivery(
       pullRequest.url,
       pullRequest.headSha,
       pullRequest.platform ?? "github"
     );
-    submitJob(options.job, chainId(options.chain), delivery);
+    submitJob(jobId, network, delivery);
     console.log(pc.green(`\nDelivered PR #${pullRequest.number} at ${pullRequest.headSha.slice(0, 12)}.\n`));
   });
 
 program
   .command("verify")
   .argument("<issue>", "Issue ID")
+  .option("--memory", "Record the verification outcome through Sibyl")
   .description("Verify the delivered work")
-  .action((value: string) => {
+  .action(async (value: string, options: { memory?: boolean }) => {
     const number = value;
     const job = getJob(number);
     if (job.contract.kind === "cultos.github.review.v1") {
@@ -369,12 +463,22 @@ program
       if (review.passed) {
         console.log(pc.green(`\nReview verified at ${review.headSha.slice(0, 12)}.\n`));
         updateJob(number, { status: "verified" });
-        return;
+      } else {
+        console.log(pc.red("\nVerification failed:"));
+        for (const failure of review.failures) console.log(`- ${failure}`);
+        console.log();
+        process.exitCode = 1;
       }
-      console.log(pc.red("\nVerification failed:"));
-      for (const failure of review.failures) console.log(`- ${failure}`);
-      console.log();
-      process.exitCode = 1;
+      if (options.memory) {
+        try {
+          const { createRepositoryMemory } = await import("./memory.js");
+          await createRepositoryMemory().record(job, review);
+          console.log(pc.dim("Sibyl Memory updated.\n"));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "unavailable";
+          console.warn(pc.yellow(`Sibyl Memory unavailable: ${message}`));
+        }
+      }
       return;
     }
     const result = verifyJob(job);
@@ -388,15 +492,87 @@ program
     if (result.passed) {
       console.log(pc.green(`\nVerified at ${result.headSha.slice(0, 12)}.\n`));
       updateJob(number, { status: "verified" });
-      return;
+    } else {
+      console.log(pc.red("\nVerification failed:"));
+      for (const failure of result.failures) {
+        console.log(`- ${failure}`);
+      }
+      console.log();
+      process.exitCode = 1;
     }
+    if (options.memory) {
+      try {
+        const { createRepositoryMemory } = await import("./memory.js");
+        await createRepositoryMemory().record(job, result);
+        console.log(pc.dim("Sibyl Memory updated.\n"));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unavailable";
+        console.warn(pc.yellow(`Sibyl Memory unavailable: ${message}`));
+      }
+    }
+  });
 
-    console.log(pc.red("\nVerification failed:"));
-    for (const failure of result.failures) {
-      console.log(`- ${failure}`);
-    }
-    console.log();
+const memory = program.command("memory").description("Inspect local Sibyl repository memory");
+
+memory.command("setup").description("Install and verify Sibyl Memory").action(async () => {
+  try {
+    const { createRepositoryMemory, installSibylMemory } = await import("./memory.js");
+    try {
+      await createRepositoryMemory().status();
+      console.log(pc.green("\nSibyl Memory already ready.\n"));
+      return;
+    } catch {}
+    console.log(pc.dim("\nInstalling Sibyl Memory..."));
+    installSibylMemory();
+    await createRepositoryMemory().status();
+    console.log(pc.green("Sibyl Memory ready.\n"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "setup failed";
+    console.error(pc.red(`\nSibyl Memory setup failed: ${message}\n`));
     process.exitCode = 1;
+  }
+});
+
+memory.command("status").description("Check the Sibyl Memory connection").action(async () => {
+  try {
+    const { createRepositoryMemory } = await import("./memory.js");
+    await createRepositoryMemory().status();
+    console.log(pc.green("\nSibyl Memory ready.\n"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unavailable";
+    console.error(pc.red(`\nSibyl Memory unavailable: ${message}\n`));
+    process.exitCode = 1;
+  }
+});
+
+memory
+  .command("history")
+  .option("-R, --repo <owner/name>", "Repository")
+  .option("--platform <name>", "Repository platform: github or gitlawb")
+  .description("Read verified history for a repository")
+  .action(async (options: { repo?: string; platform?: string }) => {
+    try {
+      const repositoryPlatform = platform(options.platform);
+      const repository = getRepositoryInfo(options.repo, repositoryPlatform);
+      const { createRepositoryMemory } = await import("./memory.js");
+      const result = await createRepositoryMemory().recall(repository.nameWithOwner, repositoryPlatform);
+      console.log(pc.bold(`\nCULT OS // REPOSITORY MEMORY\n`));
+      console.log(repository.nameWithOwner);
+      if (!result?.history.length) {
+        console.log(pc.dim("\nNo verified history recorded.\n"));
+        return;
+      }
+      console.log();
+      for (const outcome of result.history) {
+        const marker = outcome.verification === "verified" ? pc.green("●") : pc.yellow("●");
+        console.log(`${marker} ${outcome.pinnedCommit.slice(0, 12)}  ${outcome.verification.padEnd(8)}  ${outcome.failures[0] ?? "required checks passed"}`);
+      }
+      console.log();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unavailable";
+      console.error(pc.red(`\nSibyl Memory unavailable: ${message}\n`));
+      process.exitCode = 1;
+    }
   });
 
 program

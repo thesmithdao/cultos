@@ -125,7 +125,7 @@ async function defaultConfirm(question: string): Promise<boolean> {
 async function defaultWait(): Promise<void> {
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    await prompt.question("Press ENTER to open CultOS. ");
+    await prompt.question("Press ENTER to cross the gate. ");
   } finally {
     prompt.close();
   }
@@ -160,8 +160,8 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
   const wait = options.wait ?? defaultWait;
   const launch = options.launch ?? runBbs;
 
-  console.log(pc.bold("\n╞ CULT OS ╡  START\n"));
-  console.log(pc.dim("BOOT SEQUENCE"));
+  console.log(pc.bold("\nCULT OS // SUMMONING RITUAL\n"));
+  console.log(pc.dim("ESTABLISHING CONNECTIONS"));
 
   stage(1, "REPOSITORY");
   if (!exists("git")) return fail("Git is not installed", "Install Git, then run cult start again.");
@@ -173,7 +173,7 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
   if (remote.status !== 0 || (!remoteRepository && !gitlawbRepository)) {
     return fail("The origin remote is not a supported repository");
   }
-  console.log(`${pc.green("●")} ${remoteRepository ?? `${gitlawbRepository?.owner}/${gitlawbRepository?.repository}`}`);
+  console.log(`${pc.green("◆")} ${remoteRepository ?? `${gitlawbRepository?.owner}/${gitlawbRepository?.repository}`} bound`);
 
   let repositoryName: string;
   if (gitlawbRepository) {
@@ -196,7 +196,7 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
     const repository = captured("gl", ["repo", "info", reference]);
     if (repository.status !== 0) return fail("GitLawb cannot access this repository", repository.stderr.trim());
     repositoryName = reference;
-    console.log(`${pc.green("●")} ${repositoryName}`);
+    console.log(`${pc.green("◆")} identity verified`);
   } else {
     stage(2, "GITHUB");
     if (!exists("gh")) {
@@ -215,7 +215,7 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
     const repositoryResult = parsed(z.object({ nameWithOwner: z.string() }), repository.stdout);
     if (!repositoryResult) return fail("GitHub returned an unreadable repository response");
     repositoryName = repositoryResult.nameWithOwner;
-    console.log(`${pc.green("●")} ${repositoryName}`);
+    console.log(`${pc.green("◆")} identity verified`);
   }
 
   stage(3, "ACP");
@@ -240,7 +240,7 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
   const firstAgentList = parsed(agentListSchema, agents.stdout);
   if (!firstAgentList) return fail("ACP returned an unreadable agent list");
   const agentList = firstAgentList.data;
-  console.log(`${pc.green("●")} connected`);
+  console.log(`${pc.green("◆")} channel opened`);
 
   stage(4, "AGENT");
   if (agentList.length === 0) {
@@ -265,7 +265,7 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
   if (active.status !== 0) return fail("Unable to read the active ACP agent");
   const agent = parsed(activeAgentSchema, active.stdout);
   if (!agent) return fail("ACP returned an unreadable active agent");
-  console.log(`${pc.green("●")} ${agent.name}`);
+  console.log(`${pc.green("◆")} ${agent.name} summoned`);
   console.log(pc.dim(`  ${agent.walletAddress}`));
 
   stage(5, "SIGNER");
@@ -303,12 +303,12 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
     if (!signatureVerified) return fail("Unable to verify the ACP signer", signature.stderr.trim());
   }
   if (!signatureVerified) return fail("Unable to verify the ACP signer");
-  console.log(`${pc.green("●")} ${signerPolicy(signer.stdout)}`);
+  console.log(`${pc.green("◆")} ${signerPolicy(signer.stdout)} seal verified`);
 
-  console.log(pc.green(pc.bold("\nSYSTEM READY\n")));
+  console.log(pc.green(pc.bold("\nCULT OS HAS BEEN SUMMONED\n")));
   console.log(`${pc.dim("REPOSITORY")}   ${repositoryName}`);
   console.log(`${pc.dim("AGENT")}        ${agent.name}`);
-  console.log(`${pc.dim("NETWORK")}      Base\n`);
+  console.log(`${pc.dim("NETWORK")}      BASE\n`);
 
   await wait();
   launch();

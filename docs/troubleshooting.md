@@ -20,12 +20,12 @@ Run CultOS inside a Git repository with a GitHub `origin` remote.
 ## ACP authentication required
 
 ```bash
-acp configure
-acp agent list
-acp agent signer-policy
+cult start
+cult agent list
+cult agent current
 ```
 
-The active buyer or provider must have a signer approved for ACP actions.
+Cult OS guides authentication, agent selection and signer setup. The active buyer or provider must have a signer approved for ACP actions.
 
 ## No provider quote found
 

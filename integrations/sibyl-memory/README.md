@@ -13,59 +13,46 @@ Memory informs the next inspection. Cult OS verification remains deterministic, 
 
 ## Install
 
-Clone Cult OS and install its dependencies:
+Install Cult OS, then let it prepare and verify the tested Sibyl MCP server:
 
 ```bash
-git clone https://github.com/thesmithdao/cultos.git
-cd cultos
-npm install
+cult memory setup
 ```
 
-Create an isolated Python environment and install the tested Sibyl MCP server:
+Setup requires Python 3.10 or newer on macOS, Linux or WSL2. It reuses a working Sibyl server when one is already available; otherwise it installs `sibyl-memory-mcp==0.2.1` in the repository's ignored `.cultos/sibyl` environment. If Sibyl is installed elsewhere, set `SIBYL_MEMORY_MCP` to its `sibyl-memory-mcp` executable before running setup.
 
-```bash
-python3 -m venv .cultos/sibyl
-.cultos/sibyl/bin/pip install sibyl-memory-mcp==0.2.1
-```
-
-If Sibyl is installed elsewhere, set `SIBYL_MEMORY_MCP` to the `sibyl-memory-mcp` executable.
-
-## Run
+## Use
 
 Check the connection:
 
 ```bash
-npm run sibyl:memory
+cult memory status
 ```
 
-Record a verified failed delivery:
+Recall repository history while inspecting an issue:
 
 ```bash
-npm run sibyl:memory:record
+cult inspect 42 --memory
 ```
 
-Close the terminal. From a fresh terminal or agent session, recall the failure and verify the corrected delivery:
+Record the actual verifier outcome after a provider delivers its pull request:
 
 ```bash
-npm run sibyl:memory:recall
+cult verify 42 --memory
 ```
 
-Inspect the resulting repository history:
+Read the resulting history from any later terminal or agent session:
 
 ```bash
-npm run sibyl:memory:history
+cult memory history
 ```
 
-Reset the isolated database before another run:
+Use `-R owner/name` and `--platform github|gitlawb` when operating outside the repository.
 
-```bash
-npm run sibyl:memory:reset
-```
-
-The repeatable flow uses pinned repository responses while executing the real Cult OS delivery verifier and the real Sibyl MCP persistence layer. It makes no network request, spends no funds, and never reads `.env` or existing Cult OS job state.
+Without `--memory`, `inspect` and `verify` retain their existing behavior and do not start Sibyl. If Sibyl is missing, unavailable or returns malformed data, Cult OS prints a warning and preserves the verifier result and exit status.
 
 ## Memory contract
 
 Only Cult OS verification outcomes enter this store: repository identity, pinned commit, check states and concrete failures. The schema rejects arbitrary fields and bounds every stored collection and string.
 
-The database lives at `.cultos/sibyl-memory/memory.db`. `.cultos/` is ignored by Git.
+Sibyl owns its local database. Cult OS sends only the canonical repository, platform, issue reference, pull-request URL, pinned commit, verification result, bounded CI state, bounded failures and timestamp. It does not send credentials, payment data, issue bodies, conversations, provider output or model instructions.

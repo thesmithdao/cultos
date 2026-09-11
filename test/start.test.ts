@@ -120,6 +120,15 @@ describe("cult start", () => {
 
     expect(result.ready).toBe(true);
     expect(result.launch).toHaveBeenCalledOnce();
+    const output = vi.mocked(console.log).mock.calls.flat().join("\n");
+    expect(output).toContain("CULT OS // SUMMONING RITUAL");
+    expect(output).toContain("ESTABLISHING CONNECTIONS");
+    expect(output).toContain("example/repo bound");
+    expect(output).toContain("identity verified");
+    expect(output).toContain("channel opened");
+    expect(output).toContain("Example Agent summoned");
+    expect(output).toContain("ready seal verified");
+    expect(output).toContain("CULT OS HAS BEEN SUMMONED");
   });
 
   test("opens CultOS from a GitLawb repository", async () => {

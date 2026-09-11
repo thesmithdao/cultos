@@ -19,11 +19,15 @@ describe("BBS command deck", () => {
     const screen = stripAnsi(renderDeck(0, 80));
 
     expect(screen).toContain("TERMINAL");
+    expect(screen).toContain("help");
+    expect(screen).not.toContain("agent current");
     expect(screen).toContain("hire <issue> --provider");
-    expect(screen).toContain("verify <issue>");
+    expect(screen).toContain("verify <issue> [--memory]");
     expect(screen).toContain("settle <issue> --approve");
+    expect(screen).not.toContain("[01]");
     expect(screen).not.toContain("…");
     for (const description of [
+      "List CLI commands.",
       "Check repo + ACP.",
       "Create work contract",
       "Open a provider job.",
@@ -35,23 +39,33 @@ describe("BBS command deck", () => {
       "Check delivery.",
       "Release payment.",
       "Reject with receipt.",
-      "List repo jobs."
+      "List repo jobs.",
+      "Read repo memory."
     ]) expect(screen).toContain(description);
   });
 
   test("renders a detail screen", () => {
-    const screen = stripAnsi(renderCommand(8, 80));
+    const screen = stripAnsi(renderCommand(9, 80));
 
     expect(screen).toContain("VERIFY // MAINTAINER");
-    expect(screen).toContain("cult verify <issue>");
+    expect(screen).toContain("cult verify <issue> [--memory]");
     expect(screen).toContain("Check delivery.");
   });
 
   test("renders all command screens", () => {
-    for (let index = 0; index < 12; index += 1) {
+    for (let index = 0; index < 14; index += 1) {
       const lines = stripAnsi(renderCommand(index, 80)).split("\n");
       expect(lines.every((line) => line.length === 80)).toBe(true);
     }
+  });
+
+  test("shows the complete Sibyl Memory workflow", () => {
+    const screen = stripAnsi(renderCommand(13, 100));
+
+    expect(screen).toContain("cult memory status");
+    expect(screen).toContain("cult inspect <issue> --memory");
+    expect(screen).toContain("cult verify <issue> --memory");
+    expect(screen).toContain("cult memory history");
   });
 
   test("fits every line to the terminal width", () => {
@@ -67,6 +81,8 @@ describe("BBS command deck", () => {
       "Please include tests"
     ]);
     expect(validateCommand(["message", "12", "hello"])).toBeUndefined();
+    expect(validateCommand(["help"])).toBeUndefined();
+    expect(validateCommand(["agent", "use", "agent-id"])).toBeUndefined();
     expect(validateCommand(["rm", "-rf"])).toBe("Unknown CultOS command: rm");
   });
 

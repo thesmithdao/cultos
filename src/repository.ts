@@ -101,5 +101,5 @@ export function commentOnRepositoryIssue(
     commentOnGitLawbIssue(repository, String(issue), body);
     return;
   }
-  commentOnGitHubIssue(Number(issue), body);
+  commentOnGitHubIssue(Number(issue), body, repository);
 }
