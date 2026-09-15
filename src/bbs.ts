@@ -22,18 +22,17 @@ interface DeckCommand {
 const commands: DeckCommand[] = [
   { command: "help", phase: "GUIDE", role: "Either", description: "List CLI commands.", next: "Choose the command for the work you want to perform." },
   { command: "doctor", phase: "CHECK", role: "Maintainer", description: "Check repo + ACP.", next: "Resolve missing checks, then inspect an issue." },
-  { command: "inspect <issue> [--memory]", phase: "PLAN", role: "Maintainer", description: "Create work contract", next: "Review the contract, then choose a provider." },
+  { command: "inspect <issue>", phase: "PLAN", role: "Maintainer", description: "Create work contract", next: "Review the contract, then choose a provider." },
   { command: "hire <issue> --provider <address>", phase: "HIRE", role: "Maintainer", description: "Open a provider job.", next: "Watch the job for the provider quote." },
   { command: "watch <issue>", phase: "SYNC", role: "Either", description: "Read job updates.", next: "Take the action shown by the latest job event." },
   { command: "fund <issue>", phase: "PAY", role: "Maintainer", description: "Fund quote.", next: "Watch the funded job for delivery." },
   { command: "message <issue> <text>", phase: "COMMS", role: "Either", description: "Message provider.", next: "Watch for the other party's response." },
   { command: "quote <issue> --amount <usdc>", phase: "PROVIDER", role: "Provider", description: "Set provider price.", next: "Wait for the maintainer to fund the quote." },
   { command: "deliver <issue> --pr <url>", phase: "PROVIDER", role: "Provider", description: "Submit a PR.", next: "Wait for verification and maintainer review." },
-  { command: "verify <issue> [--memory]", phase: "VERIFY", role: "Maintainer", description: "Check delivery.", next: "Review and merge the verified pull request." },
+  { command: "verify <issue>", phase: "VERIFY", role: "Maintainer", description: "Check delivery.", next: "Review and merge the verified pull request." },
   { command: "settle <issue> --approve", phase: "SETTLE", role: "Maintainer", description: "Release payment.", next: "CultOS posts the settlement receipt to the issue." },
   { command: "settle <issue> --reject", phase: "REJECT", role: "Maintainer", description: "Reject with receipt.", next: "Review the receipt and close the issue if needed." },
-  { command: "jobs", phase: "INDEX", role: "Either", description: "List repo jobs.", next: "Open the relevant issue or continue its workflow." },
-  { command: "memory history", phase: "MEMORY", role: "Either", description: "Read repo memory.", next: "Use relevant outcomes while inspecting the next issue." }
+  { command: "jobs", phase: "INDEX", role: "Either", description: "List repo jobs.", next: "Open the relevant issue or continue its workflow." }
 ];
 
 const commandNames = new Set(commands.map((item) => item.command.split(" ")[0]));
@@ -178,26 +177,6 @@ export function renderDeck(selected = 0, columns = 94, rows = 23): string {
 export function renderCommand(selected = 0, columns = 94, rows = 23): string {
   const width = Math.max(72, Math.min(columns, 100));
   const item = commandAt(selected);
-  if (item.phase === "MEMORY") {
-    return frame([
-      "SIBYL MEMORY // LOCAL",
-      "",
-      "SET UP",
-      "cult memory setup",
-      "",
-      "CHECK",
-      "cult memory status",
-      "",
-      "RECALL BEFORE WORK",
-      "cult inspect <issue> --memory",
-      "",
-      "RECORD AFTER DELIVERY",
-      "cult verify <issue> --memory",
-      "",
-      "READ HISTORY",
-      "cult memory history"
-    ], " ESC BACK   ↑↓ NEXT COMMAND   Q QUIT ", width, rows, "MEMORY");
-  }
   return frame([
     `${color.ink}${item.phase} // ${item.role.toUpperCase()}`,
     "",

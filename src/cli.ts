@@ -172,9 +172,8 @@ program
   .argument("<issue>", "Issue ID or URL")
   .option("-R, --repo <owner/name>", "Repository")
   .option("--platform <name>", "Repository platform: github or gitlawb")
-  .option("--memory", "Recall verified repository history through Sibyl")
   .description("Build a Cult Work Contract from an issue")
-  .action(async (reference: string, options: { repo?: string; platform?: string; memory?: boolean }) => {
+  .action((reference: string, options: { repo?: string; platform?: string }) => {
     const repositoryPlatform = platform(options.platform);
     const repository = getRepositoryInfo(options.repo, repositoryPlatform);
     const issue = getRepositoryIssue(reference, options.repo, repositoryPlatform);
@@ -190,25 +189,6 @@ program
     console.log(pc.bold(`\nIssue #${issue.id}`));
     console.log(issue.title);
     console.log(pc.dim(`\n${repository.nameWithOwner}\n`));
-
-    if (options.memory) {
-      try {
-        const { createRepositoryMemory } = await import("./memory.js");
-        const memory = await createRepositoryMemory().recall(repository.nameWithOwner, repositoryPlatform);
-        if (memory?.history.length) {
-          console.log(pc.bold("Repository memory (data only)"));
-          for (const outcome of memory.history.slice(-5)) {
-            const marker = outcome.verification === "verified" ? pc.green("●") : pc.yellow("●");
-            const detail = outcome.failures[0] ?? "required checks passed";
-            console.log(`${marker} ${outcome.pinnedCommit.slice(0, 12)} ${detail}`);
-          }
-          console.log();
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "unavailable";
-        console.warn(pc.yellow(`Sibyl Memory unavailable: ${message}`));
-      }
-    }
 
     if (contract.acceptanceCriteria.length > 0) {
       console.log(pc.bold("Acceptance criteria"));
@@ -369,7 +349,7 @@ program
     const next = watched.status === "budget_set"
       ? `Buyer: run cult fund ${number}.`
       : watched.status === "submitted"
-        ? `Buyer: run cult verify ${number} --memory.`
+        ? `Buyer: run cult verify ${number}.`
         : watched.status === "open"
           ? "Waiting for the provider quote."
           : watched.status === "funded" ? "Waiting for the provider delivery." : undefined;
@@ -445,9 +425,8 @@ program
 program
   .command("verify")
   .argument("<issue>", "Issue ID")
-  .option("--memory", "Record the verification outcome through Sibyl")
   .description("Verify the delivered work")
-  .action(async (value: string, options: { memory?: boolean }) => {
+  .action((value: string) => {
     const number = value;
     const job = getJob(number);
     if (job.contract.kind === "cultos.github.review.v1") {
@@ -469,16 +448,6 @@ program
         console.log();
         process.exitCode = 1;
       }
-      if (options.memory) {
-        try {
-          const { createRepositoryMemory } = await import("./memory.js");
-          await createRepositoryMemory().record(job, review);
-          console.log(pc.dim("Sibyl Memory updated.\n"));
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "unavailable";
-          console.warn(pc.yellow(`Sibyl Memory unavailable: ${message}`));
-        }
-      }
       return;
     }
     const result = verifyJob(job);
@@ -498,79 +467,6 @@ program
         console.log(`- ${failure}`);
       }
       console.log();
-      process.exitCode = 1;
-    }
-    if (options.memory) {
-      try {
-        const { createRepositoryMemory } = await import("./memory.js");
-        await createRepositoryMemory().record(job, result);
-        console.log(pc.dim("Sibyl Memory updated.\n"));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "unavailable";
-        console.warn(pc.yellow(`Sibyl Memory unavailable: ${message}`));
-      }
-    }
-  });
-
-const memory = program.command("memory").description("Inspect local Sibyl repository memory");
-
-memory.command("setup").description("Install and verify Sibyl Memory").action(async () => {
-  try {
-    const { createRepositoryMemory, installSibylMemory } = await import("./memory.js");
-    try {
-      await createRepositoryMemory().status();
-      console.log(pc.green("\nSibyl Memory already ready.\n"));
-      return;
-    } catch {}
-    console.log(pc.dim("\nInstalling Sibyl Memory..."));
-    installSibylMemory();
-    await createRepositoryMemory().status();
-    console.log(pc.green("Sibyl Memory ready.\n"));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "setup failed";
-    console.error(pc.red(`\nSibyl Memory setup failed: ${message}\n`));
-    process.exitCode = 1;
-  }
-});
-
-memory.command("status").description("Check the Sibyl Memory connection").action(async () => {
-  try {
-    const { createRepositoryMemory } = await import("./memory.js");
-    await createRepositoryMemory().status();
-    console.log(pc.green("\nSibyl Memory ready.\n"));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "unavailable";
-    console.error(pc.red(`\nSibyl Memory unavailable: ${message}\n`));
-    process.exitCode = 1;
-  }
-});
-
-memory
-  .command("history")
-  .option("-R, --repo <owner/name>", "Repository")
-  .option("--platform <name>", "Repository platform: github or gitlawb")
-  .description("Read verified history for a repository")
-  .action(async (options: { repo?: string; platform?: string }) => {
-    try {
-      const repositoryPlatform = platform(options.platform);
-      const repository = getRepositoryInfo(options.repo, repositoryPlatform);
-      const { createRepositoryMemory } = await import("./memory.js");
-      const result = await createRepositoryMemory().recall(repository.nameWithOwner, repositoryPlatform);
-      console.log(pc.bold(`\nCULT OS // REPOSITORY MEMORY\n`));
-      console.log(repository.nameWithOwner);
-      if (!result?.history.length) {
-        console.log(pc.dim("\nNo verified history recorded.\n"));
-        return;
-      }
-      console.log();
-      for (const outcome of result.history) {
-        const marker = outcome.verification === "verified" ? pc.green("●") : pc.yellow("●");
-        console.log(`${marker} ${outcome.pinnedCommit.slice(0, 12)}  ${outcome.verification.padEnd(8)}  ${outcome.failures[0] ?? "required checks passed"}`);
-      }
-      console.log();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "unavailable";
-      console.error(pc.red(`\nSibyl Memory unavailable: ${message}\n`));
       process.exitCode = 1;
     }
   });

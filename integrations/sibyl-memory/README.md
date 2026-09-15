@@ -1,5 +1,7 @@
 # Cult OS + Sibyl Memory
 
+This integration remains available on the security-maintained Cult OS 0.4.x track. Cult OS 0.5.x is the lean ACP CLI and does not include Memory commands or the MCP SDK dependency.
+
 Cult OS gives developer agents persistent repository memory. Each verified delivery becomes context for the next job: recurring failures are remembered, successful patterns are retained, and a fresh process begins with the repository's verified history instead of starting from zero.
 
 Sibyl surrounds the existing Cult OS workflow without changing its authority:
@@ -13,9 +15,10 @@ Memory informs the next inspection. Cult OS verification remains deterministic, 
 
 ## Install
 
-Install Cult OS, then let it prepare and verify the tested Sibyl MCP server:
+Install the current 0.4.x release, then let it prepare and verify the tested Sibyl MCP server:
 
 ```bash
+npm install -g @cultos/cli@0.4.1
 cult memory setup
 ```
 
