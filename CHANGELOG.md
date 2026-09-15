@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+Sibyl Memory is installed and executed only from the user-managed `~/.cultos/sibyl` environment. Cult OS no longer discovers or executes a Sibyl binary from the current repository or the implicit command path. Existing memory data is unchanged; users upgrading from 0.4.0 should run `cult memory setup` once to create the trusted installation.
+
 ## 0.4.0
 
 Cult OS now supports optional repository memory through Sibyl. Run `cult memory setup`, use `cult inspect <issue> --memory` to recall prior outcomes, and `cult verify <issue> --memory` to record verification results for later sessions. Memory does not authorize payments or settlement. Setup requires Python 3.10 or newer on macOS, Linux or WSL2; ordinary CLI commands do not require Python.

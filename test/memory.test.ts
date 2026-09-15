@@ -1,5 +1,8 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createRepositoryMemory, repositoryMemorySchema, verificationOutcome, type MemoryBackend } from "../src/memory.js";
+import { createRepositoryMemory, repositoryMemorySchema, sibylServerCommand, verificationOutcome, type MemoryBackend } from "../src/memory.js";
 import type { CultJob } from "../src/state.js";
 import type { VerificationResult } from "../src/verify.js";
 
@@ -51,6 +54,45 @@ function result(commit = "1".repeat(40), passed = true): VerificationResult {
 }
 
 describe("Sibyl repository memory", () => {
+  it("uses only the managed home installation by default", () => {
+    const home = join(tmpdir(), `cultos-memory-${crypto.randomUUID()}`);
+    const repository = join(tmpdir(), `cultos-repository-${crypto.randomUUID()}`);
+    const managed = join(home, ".cultos", "sibyl", "bin", "sibyl-memory-mcp");
+    const repositoryExecutable = join(repository, ".cultos", "sibyl", "bin", "sibyl-memory-mcp");
+    mkdirSync(join(home, ".cultos", "sibyl", "bin"), { recursive: true });
+    mkdirSync(join(repository, ".cultos", "sibyl", "bin"), { recursive: true });
+    writeFileSync(managed, "managed");
+    writeFileSync(repositoryExecutable, "repository-controlled");
+
+    const previous = process.cwd();
+    process.chdir(repository);
+    try {
+      expect(sibylServerCommand(home, undefined)).toBe(managed);
+    } finally {
+      process.chdir(previous);
+    }
+  });
+
+  it("refuses repository and PATH fallback when the managed installation is absent", () => {
+    const home = join(tmpdir(), `cultos-memory-${crypto.randomUUID()}`);
+    const repository = join(tmpdir(), `cultos-repository-${crypto.randomUUID()}`);
+    const repositoryExecutable = join(repository, ".cultos", "sibyl", "bin", "sibyl-memory-mcp");
+    mkdirSync(join(repository, ".cultos", "sibyl", "bin"), { recursive: true });
+    writeFileSync(repositoryExecutable, "repository-controlled");
+
+    const previous = process.cwd();
+    process.chdir(repository);
+    try {
+      expect(() => sibylServerCommand(home, undefined)).toThrow("run cult memory setup");
+    } finally {
+      process.chdir(previous);
+    }
+  });
+
+  it("allows an explicit Sibyl executable override", () => {
+    expect(sibylServerCommand("/unused", "/trusted/sibyl-memory-mcp")).toBe("/trusted/sibyl-memory-mcp");
+  });
+
   it("records and recalls a schema-bound verification outcome", async () => {
     const backend = new MemoryStore();
     const memory = createRepositoryMemory(backend);

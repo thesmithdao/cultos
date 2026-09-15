@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, mkdirSync } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import type { RepositoryPlatform } from "./contract.js";
@@ -86,23 +87,21 @@ function resultJson(result: unknown): unknown {
   }
 }
 
-function repositoryRoot(): string {
-  try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    return process.cwd();
-  }
+function managedEnvironment(home = homedir()): string {
+  return join(home, ".cultos", "sibyl");
 }
 
-function localServerCommand(root = repositoryRoot()): string {
-  return join(root, ".cultos", "sibyl", "bin", "sibyl-memory-mcp");
+function managedServerCommand(home = homedir()): string {
+  return join(managedEnvironment(home), "bin", "sibyl-memory-mcp");
 }
 
-function serverCommand(): string {
-  const configured = process.env.SIBYL_MEMORY_MCP?.trim();
+export function sibylServerCommand(home = homedir(), configured = process.env.SIBYL_MEMORY_MCP?.trim()): string {
   if (configured) return configured;
-  const local = localServerCommand();
-  return existsSync(local) ? local : "sibyl-memory-mcp";
+  const managed = managedServerCommand(home);
+  if (!existsSync(managed) || !lstatSync(managed).isFile()) {
+    throw new Error("Sibyl Memory is not installed; run cult memory setup");
+  }
+  return managed;
 }
 
 function checkedRun(command: string, args: string[]): string {
@@ -137,9 +136,8 @@ export function installSibylMemory(): string {
   if (process.env.SIBYL_MEMORY_MCP?.trim()) {
     throw new Error("SIBYL_MEMORY_MCP is configured but unavailable; fix or unset it before setup");
   }
-  const root = repositoryRoot();
-  const cultosDirectory = join(root, ".cultos");
-  const environment = join(cultosDirectory, "sibyl");
+  const cultosDirectory = join(homedir(), ".cultos");
+  const environment = managedEnvironment();
   rejectSymlink(cultosDirectory);
   rejectSymlink(environment);
   mkdirSync(cultosDirectory, { recursive: true, mode: 0o700 });
@@ -149,8 +147,8 @@ export function installSibylMemory(): string {
   checkedRun(environmentPython, [
     "-m", "pip", "install", "--disable-pip-version-check", "--no-input", `sibyl-memory-mcp==${SIBYL_MCP_VERSION}`
   ]);
-  const installed = localServerCommand(root);
-  if (!existsSync(installed)) throw new Error("Sibyl MCP executable was not installed");
+  const installed = managedServerCommand();
+  if (!existsSync(installed) || !lstatSync(installed).isFile()) throw new Error("Sibyl MCP executable was not installed");
   return installed;
 }
 
@@ -165,7 +163,7 @@ async function connect(): Promise<McpClient> {
     const value = process.env[key];
     if (value) env[key] = value;
   }
-  const transport = new StdioClientTransport({ command: serverCommand(), env, stderr: "pipe" });
+  const transport = new StdioClientTransport({ command: sibylServerCommand(), env, stderr: "pipe" });
   let timer: NodeJS.Timeout | undefined;
   try {
     await Promise.race([

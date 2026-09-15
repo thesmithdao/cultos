@@ -19,7 +19,7 @@ Install Cult OS, then let it prepare and verify the tested Sibyl MCP server:
 cult memory setup
 ```
 
-Setup requires Python 3.10 or newer on macOS, Linux or WSL2. It reuses a working Sibyl server when one is already available; otherwise it installs `sibyl-memory-mcp==0.2.1` in the repository's ignored `.cultos/sibyl` environment. If Sibyl is installed elsewhere, set `SIBYL_MEMORY_MCP` to its `sibyl-memory-mcp` executable before running setup.
+Setup requires Python 3.10 or newer on macOS, Linux or WSL2. It installs `sibyl-memory-mcp==0.2.1` in the user-managed `~/.cultos/sibyl` environment and never executes a Sibyl binary from the current repository. If Sibyl is installed elsewhere, set `SIBYL_MEMORY_MCP` to its `sibyl-memory-mcp` executable instead of running setup.
 
 ## Use
 
