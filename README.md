@@ -32,7 +32,7 @@ Your repository already knows what needs to be built. Virtuals gives agents iden
 
 A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository and delivered commit before the job is settled.
 
-[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [Provider integration](docs/provider-integration.md) · [Sibyl Memory](integrations/sibyl-memory/README.md)
+[Documentation](docs/index.md) · [Getting started](docs/getting-started.md) · [Aeon reviews](docs/aeon-review.md) · [Provider integration](docs/provider-integration.md)
 
 ## Requirements
 
@@ -44,7 +44,6 @@ CultOS requires Node.js 20+, Git and either GitHub CLI or GitLawb CLI. `cult sta
 npm install -g @cultos/cli
 cult start
 cult inspect 42
-cult inspect 42 --memory
 ```
 
 Or run it without installing:
@@ -65,9 +64,6 @@ cult hire 42 --pr 47 --provider 0xProvider --offering aeon_pull_request_review
 cult watch 42
 cult fund 42
 cult verify 42
-cult verify 42 --memory
-cult memory status
-cult memory history
 cult settle 42 --approve
 ```
 
@@ -121,19 +117,9 @@ cult settle 42 --approve
 
 CultOS posts the ACP job, provider, payment, pull request and commit back to the GitHub issue.
 
-## Repository memory
+## Release tracks
 
-The optional Sibyl integration carries verified repository outcomes across agent sessions. It recalls earlier failures before the next job and records only the result produced by CultOS verification. Memory never approves work or participates in payment and settlement.
-
-```bash
-cult memory setup
-cult memory status
-cult inspect 42 --memory
-cult verify 42 --memory
-cult memory history
-```
-
-[Set up Sibyl Memory](integrations/sibyl-memory/README.md).
+Cult OS 0.5.x is the lean ACP CLI without repository memory. Users who rely on the optional Sibyl Memory commands remain on the security-maintained 0.4.x track.
 
 ## Requirements
 

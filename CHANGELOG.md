@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+Cult OS returns to a lean ACP core. Sibyl Memory commands and the MCP SDK dependency are not included in the 0.5.x track. Users who rely on repository memory remain on the security-maintained 0.4.x track.
+
 ## 0.4.1
 
 Sibyl Memory is installed and executed only from the user-managed `~/.cultos/sibyl` environment. Cult OS no longer discovers or executes a Sibyl binary from the current repository or the implicit command path. Existing memory data is unchanged; users upgrading from 0.4.0 should run `cult memory setup` once to create the trusted installation.

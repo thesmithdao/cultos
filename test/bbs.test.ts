@@ -22,7 +22,7 @@ describe("BBS command deck", () => {
     expect(screen).toContain("help");
     expect(screen).not.toContain("agent current");
     expect(screen).toContain("hire <issue> --provider");
-    expect(screen).toContain("verify <issue> [--memory]");
+    expect(screen).toContain("verify <issue>");
     expect(screen).toContain("settle <issue> --approve");
     expect(screen).not.toContain("[01]");
     expect(screen).not.toContain("…");
@@ -39,8 +39,7 @@ describe("BBS command deck", () => {
       "Check delivery.",
       "Release payment.",
       "Reject with receipt.",
-      "List repo jobs.",
-      "Read repo memory."
+      "List repo jobs."
     ]) expect(screen).toContain(description);
   });
 
@@ -48,24 +47,15 @@ describe("BBS command deck", () => {
     const screen = stripAnsi(renderCommand(9, 80));
 
     expect(screen).toContain("VERIFY // MAINTAINER");
-    expect(screen).toContain("cult verify <issue> [--memory]");
+    expect(screen).toContain("cult verify <issue>");
     expect(screen).toContain("Check delivery.");
   });
 
   test("renders all command screens", () => {
-    for (let index = 0; index < 14; index += 1) {
+    for (let index = 0; index < 13; index += 1) {
       const lines = stripAnsi(renderCommand(index, 80)).split("\n");
       expect(lines.every((line) => line.length === 80)).toBe(true);
     }
-  });
-
-  test("shows the complete Sibyl Memory workflow", () => {
-    const screen = stripAnsi(renderCommand(13, 100));
-
-    expect(screen).toContain("cult memory status");
-    expect(screen).toContain("cult inspect <issue> --memory");
-    expect(screen).toContain("cult verify <issue> --memory");
-    expect(screen).toContain("cult memory history");
   });
 
   test("fits every line to the terminal width", () => {
