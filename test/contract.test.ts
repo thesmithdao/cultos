@@ -102,6 +102,38 @@ describe("pull-request delivery", () => {
 
     expect(parsePullRequestDelivery(JSON.stringify(delivery))).toEqual(delivery);
   });
+
+  it("rejects a delivery URL that is not a pull-request location", () => {
+    for (const url of [
+      "--repo",
+      "javascript:alert(1)",
+      "http://github.com/thecultos/example/pull/47",
+      "file:///etc/passwd",
+      "gitlawb://did:key:z6MkOwner/example/tree/main"
+    ]) {
+      expect(() => parsePullRequestDelivery({
+        kind: "cultos.github.pull-request.v1",
+        url,
+        headSha: "abc123456789"
+      })).toThrow();
+    }
+  });
+
+  it("rejects escape sequences hidden in a delivery URL", () => {
+    expect(() => parsePullRequestDelivery({
+      kind: "cultos.github.pull-request.v1",
+      url: "https://github.com/thecultos/example/pull/47\u001b[2K",
+      headSha: "abc123456789"
+    })).toThrow();
+  });
+
+  it("rejects a head SHA that is not a commit", () => {
+    expect(() => parsePullRequestDelivery({
+      kind: "cultos.github.pull-request.v1",
+      url: "https://github.com/thecultos/example/pull/47",
+      headSha: "--upload-pack=touch /tmp/x"
+    })).toThrow();
+  });
 });
 
 describe("Aeon review contract", () => {
@@ -142,5 +174,67 @@ describe("Aeon review contract", () => {
         usage: { input_tokens: 10, output_tokens: 20 }
       }
     }).verdict).toBe("approve-ready");
+  });
+
+  it("rejects escape sequences in provider-written review text", () => {
+    const delivery = {
+      schema: "cultos.aeon.review.v1",
+      status: "complete",
+      repository: "thecultos/example",
+      issue: 42,
+      pull_request: 47,
+      head_sha: "a".repeat(40),
+      verdict: "approve-ready",
+      summary: "No material defects found.",
+      findings: [],
+      reviewed_files: ["src/index.ts"],
+      limitations: [],
+      run: {
+        id: 91,
+        url: "https://github.com/cultosdev/aeon/actions/runs/91",
+        model: "anthropic/claude-sonnet-4",
+        gateway: "openrouter",
+        usage: { input_tokens: 10, output_tokens: 20 }
+      }
+    };
+
+    expect(() => parseAeonReviewDelivery({
+      ...delivery,
+      summary: "All good.\u001b[2K\u001b[A\u001b[2KVerified."
+    })).toThrow();
+
+    expect(() => parseAeonReviewDelivery({
+      ...delivery,
+      findings: [{
+        severity: "medium",
+        path: "src/index.ts",
+        line: 1,
+        title: "Looks fine\r  Verified at abcdef123456",
+        consequence: "None."
+      }]
+    })).toThrow();
+  });
+
+  it("rejects a review run URL that is not https", () => {
+    expect(() => parseAeonReviewDelivery({
+      schema: "cultos.aeon.review.v1",
+      status: "complete",
+      repository: "thecultos/example",
+      issue: 42,
+      pull_request: 47,
+      head_sha: "a".repeat(40),
+      verdict: "approve-ready",
+      summary: "No material defects found.",
+      findings: [],
+      reviewed_files: [],
+      limitations: [],
+      run: {
+        id: 91,
+        url: "http://evil.example/run/91",
+        model: "anthropic/claude-sonnet-4",
+        gateway: "openrouter",
+        usage: { input_tokens: 10, output_tokens: 20 }
+      }
+    })).toThrow();
   });
 });

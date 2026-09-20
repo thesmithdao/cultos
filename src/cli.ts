@@ -26,6 +26,7 @@ import {
   parsePullRequestDelivery
 } from "./contract.js";
 import { runBbs } from "./bbs.js";
+import { cell, plain, safe } from "./display.js";
 import { runDoctor } from "./doctor.js";
 import { runStart } from "./start.js";
 import {
@@ -111,25 +112,25 @@ function settlementReceipt(job: ReturnType<typeof getJob>, outcome: "completed" 
   const delivery = job.delivery
     ? isAeonReviewDelivery(job.delivery)
       ? [
-          `| Review | ${job.delivery.run.url} |`,
-          `| Verdict | **${job.delivery.verdict}** |`,
-          `| Commit | \`${job.delivery.head_sha}\` |`
+          `| Review | ${cell(job.delivery.run.url)} |`,
+          `| Verdict | **${cell(job.delivery.verdict)}** |`,
+          `| Commit | \`${cell(job.delivery.head_sha)}\` |`
         ]
       : [
-          `| Delivery | ${job.delivery.url} |`,
-          `| Commit | \`${job.delivery.headSha}\` |`
+          `| Delivery | ${cell(job.delivery.url)} |`,
+          `| Commit | \`${cell(job.delivery.headSha)}\` |`
         ]
     : [];
   return [
-    `<!-- cultos-job:${job.chainId}:${job.jobId} -->`,
+    `<!-- cultos-job:${job.chainId}:${cell(job.jobId)} -->`,
     "### CultOS receipt",
     "",
     "| | |",
     "|---|---|",
-    `| ACP job | \`${job.jobId}\` |`,
-    `| Provider | \`${job.provider}\` |`,
+    `| ACP job | \`${cell(job.jobId)}\` |`,
+    `| Provider | \`${cell(job.provider)}\` |`,
     `| Result | **${outcome}** |`,
-    ...(job.budget ? [`| Settlement | ${job.budget} USDC |`] : []),
+    ...(job.budget ? [`| Settlement | ${cell(job.budget)} USDC |`] : []),
     ...delivery
   ].join("\n");
 }
@@ -137,20 +138,20 @@ function settlementReceipt(job: ReturnType<typeof getJob>, outcome: "completed" 
 function printJob(issue: number | string): void {
   const job = getJob(issue);
   const label = job.service === "review" ? "REVIEW" : "ISSUE";
-  console.log(pc.bold(`\nCULT OS // ${label} #${job.issueNumber}\n`));
-  console.log(`${pc.dim("ACP JOB")}     ${job.jobId}`);
-  console.log(`${pc.dim("STATUS")}      ${job.status.toUpperCase()}`);
-  console.log(`${pc.dim("PROVIDER")}    ${job.provider}`);
+  console.log(pc.bold(`\nCULT OS // ${label} #${safe(String(job.issueNumber))}\n`));
+  console.log(`${pc.dim("ACP JOB")}     ${safe(job.jobId)}`);
+  console.log(`${pc.dim("STATUS")}      ${safe(job.status).toUpperCase()}`);
+  console.log(`${pc.dim("PROVIDER")}    ${safe(job.provider)}`);
   console.log(`${pc.dim("NETWORK")}     ${job.chainId}`);
   if (job.budget) {
-    console.log(`${pc.dim("BUDGET")}      ${job.budget} USDC`);
+    console.log(`${pc.dim("BUDGET")}      ${safe(job.budget)} USDC`);
   }
   if (job.delivery) {
     if (isAeonReviewDelivery(job.delivery)) {
       console.log(`${pc.dim("VERDICT")}     ${job.delivery.verdict.toUpperCase()}`);
-      console.log(`${pc.dim("REVIEW")}      ${job.delivery.run.url}`);
+      console.log(`${pc.dim("REVIEW")}      ${safe(job.delivery.run.url)}`);
     } else {
-      console.log(`${pc.dim("DELIVERY")}    ${job.delivery.url}`);
+      console.log(`${pc.dim("DELIVERY")}    ${safe(job.delivery.url)}`);
     }
   }
   console.log();
@@ -186,14 +187,14 @@ program
       body: issue.body
     });
 
-    console.log(pc.bold(`\nIssue #${issue.id}`));
-    console.log(issue.title);
-    console.log(pc.dim(`\n${repository.nameWithOwner}\n`));
+    console.log(pc.bold(`\nIssue #${safe(String(issue.id))}`));
+    console.log(safe(issue.title));
+    console.log(pc.dim(`\n${safe(repository.nameWithOwner)}\n`));
 
     if (contract.acceptanceCriteria.length > 0) {
       console.log(pc.bold("Acceptance criteria"));
       for (const criterion of contract.acceptanceCriteria) {
-        console.log(`${pc.green("✓")} ${criterion}`);
+        console.log(`${pc.green("✓")} ${safe(criterion)}`);
       }
       console.log();
     }
@@ -308,8 +309,8 @@ program
       updatedAt: now
     });
 
-    console.log(pc.green(`ACP job ${created.jobId} created for issue #${issue.id}.`));
-    console.log(pc.dim(`Run cult watch ${reference} to follow it.`));
+    console.log(pc.green(`ACP job ${safe(created.jobId)} created for issue #${safe(String(issue.id))}.`));
+    console.log(pc.dim(`Run cult watch ${safe(reference)} to follow it.`));
   });
 
 program
@@ -320,7 +321,7 @@ program
   .action((value: string, options: { timeout?: string }) => {
     const number = value;
     const job = getJob(number);
-    console.log(pc.dim(`Watching ACP job ${job.jobId}...`));
+    console.log(pc.dim(`Watching ACP job ${safe(job.jobId)}...`));
     const watched = watchJob(
       job.jobId,
       options.timeout ? positiveInteger(options.timeout, "timeout") : undefined,
@@ -372,7 +373,7 @@ program
 
     fundJob(job.jobId, job.chainId, job.budget);
     updateJob(number, { status: "funded" });
-    console.log(pc.green(`\nACP job ${job.jobId} funded with ${job.budget} USDC.\n`));
+    console.log(pc.green(`\nACP job ${safe(job.jobId)} funded with ${safe(job.budget)} USDC.\n`));
   });
 
 program
@@ -396,9 +397,9 @@ program
   .action((issue: string | undefined, options: { job?: string; amount: string; chain?: string }) => {
     const { jobId, network } = providerAction(issue, options);
     const identity = providerIdentity(jobId, network);
-    console.log(pc.dim(`Provider identity: ${identity.name} · ${identity.walletAddress}`));
+    console.log(pc.dim(`Provider identity: ${safe(identity.name)} · ${identity.walletAddress}`));
     quoteJob(jobId, network, options.amount);
-    console.log(pc.green(`\nQuoted ${options.amount} USDC for ACP job ${jobId}.\n`));
+    console.log(pc.green(`\nQuoted ${safe(options.amount)} USDC for ACP job ${safe(jobId)}.\n`));
   });
 
 program
@@ -411,7 +412,7 @@ program
   .action((issue: string | undefined, options: { job?: string; pr: string; chain?: string }) => {
     const { jobId, network } = providerAction(issue, options);
     const identity = providerIdentity(jobId, network);
-    console.log(pc.dim(`Provider identity: ${identity.name} · ${identity.walletAddress}`));
+    console.log(pc.dim(`Provider identity: ${safe(identity.name)} · ${identity.walletAddress}`));
     const pullRequest = getRepositoryPullRequest(options.pr);
     const delivery = createPullRequestDelivery(
       pullRequest.url,
@@ -419,7 +420,7 @@ program
       pullRequest.platform ?? "github"
     );
     submitJob(jobId, network, delivery);
-    console.log(pc.green(`\nDelivered PR #${pullRequest.number} at ${pullRequest.headSha.slice(0, 12)}.\n`));
+    console.log(pc.green(`\nDelivered PR #${pullRequest.number} at ${safe(pullRequest.headSha).slice(0, 12)}.\n`));
   });
 
 program
@@ -433,18 +434,18 @@ program
       const review = verifyReviewJob(job);
       console.log(pc.bold(`\nCULT OS // VERIFY REVIEW #${review.pullRequest}\n`));
       console.log(`${pc.dim("VERDICT")}     ${review.verdict.toUpperCase()}`);
-      console.log(`${pc.dim("SUMMARY")}     ${review.summary}`);
+      console.log(`${pc.dim("SUMMARY")}     ${safe(review.summary)}`);
       for (const finding of review.findings) {
         const marker = finding.severity === "medium" ? pc.yellow("●") : pc.red("●");
         const line = finding.line ? `:${finding.line}` : "";
-        console.log(`${marker} ${finding.path}${line} ${finding.title}`);
+        console.log(`${marker} ${safe(finding.path)}${line} ${safe(finding.title)}`);
       }
       if (review.passed) {
-        console.log(pc.green(`\nReview verified at ${review.headSha.slice(0, 12)}.\n`));
+        console.log(pc.green(`\nReview verified at ${safe(review.headSha).slice(0, 12)}.\n`));
         updateJob(number, { status: "verified" });
       } else {
         console.log(pc.red("\nVerification failed:"));
-        for (const failure of review.failures) console.log(`- ${failure}`);
+        for (const failure of review.failures) console.log(`- ${safe(failure)}`);
         console.log();
         process.exitCode = 1;
       }
@@ -455,16 +456,16 @@ program
     console.log(pc.bold(`\nCULT OS // VERIFY PR #${result.pullRequest}\n`));
     for (const check of result.checks) {
       const marker = ["pass", "skipping"].includes(check.bucket) ? pc.green("●") : pc.red("●");
-      console.log(`${marker} ${check.name} ${pc.dim(check.state)}`);
+      console.log(`${marker} ${safe(check.name)} ${pc.dim(safe(check.state))}`);
     }
 
     if (result.passed) {
-      console.log(pc.green(`\nVerified at ${result.headSha.slice(0, 12)}.\n`));
+      console.log(pc.green(`\nVerified at ${safe(result.headSha).slice(0, 12)}.\n`));
       updateJob(number, { status: "verified" });
     } else {
       console.log(pc.red("\nVerification failed:"));
       for (const failure of result.failures) {
-        console.log(`- ${failure}`);
+        console.log(`- ${safe(failure)}`);
       }
       console.log();
       process.exitCode = 1;
@@ -517,7 +518,7 @@ program
       settlementReceipt(job, outcome)
     );
     updateJob(number, { receiptPostedAt: new Date().toISOString() });
-    console.log(pc.green(`\nACP job ${job.jobId} ${outcome}. Receipt posted to issue #${job.issueNumber}.\n`));
+    console.log(pc.green(`\nACP job ${safe(job.jobId)} ${outcome}. Receipt posted to issue #${safe(String(job.issueNumber))}.\n`));
   });
 
 program
@@ -531,13 +532,13 @@ program
     }
     console.log(pc.bold("\nCULT OS // JOBS\n"));
     for (const job of jobs) {
-      console.log(`#${jobReference(job).padEnd(13)} ${job.status.padEnd(12)} ACP ${job.jobId}`);
+      console.log(`#${safe(jobReference(job)).padEnd(13)} ${safe(job.status).padEnd(12)} ACP ${safe(job.jobId)}`);
     }
     console.log();
   });
 
 program.parseAsync().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(pc.red(`\n${message}\n`));
+  console.error(pc.red(`\n${plain(message)}\n`));
   process.exitCode = 1;
 });
