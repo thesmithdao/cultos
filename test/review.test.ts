@@ -35,8 +35,8 @@ describe("Aeon review hiring", () => {
         "#!/bin/sh",
         "case \"$*\" in",
         "  'repo view --json nameWithOwner,url,defaultBranchRef') echo '{\"nameWithOwner\":\"thecultos/example\",\"url\":\"https://github.com/thecultos/example\",\"defaultBranchRef\":{\"name\":\"main\"}}' ;;",
-        "  'issue view 42 --json number,title,body,url') echo '{\"number\":42,\"title\":\"Review the parser\",\"body\":\"- [ ] Review the change\",\"url\":\"https://github.com/thecultos/example/issues/42\"}' ;;",
-        `  'pr view ${pullRequestUrl} --json number,url,state,headRefOid,baseRefName') echo '{"number":47,"url":"${pullRequestUrl}","state":"OPEN","headRefOid":"${headSha}","baseRefName":"main"}' ;;`,
+        "  'issue view --json number,title,body,url -- 42') echo '{\"number\":42,\"title\":\"Review the parser\",\"body\":\"- [ ] Review the change\",\"url\":\"https://github.com/thecultos/example/issues/42\"}' ;;",
+        `  'pr view --json number,url,state,headRefOid,baseRefName -- ${pullRequestUrl}') echo '{"number":47,"url":"${pullRequestUrl}","state":"OPEN","headRefOid":"${headSha}","baseRefName":"main"}' ;;`,
         "  *) exit 1 ;;",
         "esac"
       ].join("\n")
