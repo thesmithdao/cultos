@@ -59,6 +59,14 @@ export interface GitHubCheck {
   link?: string | undefined;
 }
 
+/**
+ * Run `gh` with a JSON response.
+ *
+ * Callers put every flag before the `--` separator and the reference after it.
+ * `gh` is built on cobra, which treats everything following `--` as positional,
+ * so a reference that begins with a dash is read as a reference rather than as
+ * a flag. Delivery URLs reach `gh pr view` this way and come from the provider.
+ */
 function runGitHub(args: string[]): unknown {
   try {
     const output = execFileSync("gh", args, {
@@ -93,10 +101,11 @@ function runGitHubWithExitCodes(args: string[], exitCodes: number[]): unknown {
 }
 
 export function getIssue(reference: string, repository?: string): GitHubIssue {
-  const args = ["issue", "view", reference, "--json", "number,title,body,url"];
+  const args = ["issue", "view", "--json", "number,title,body,url"];
   if (repository) {
     args.push("--repo", repository);
   }
+  args.push("--", reference);
   const issue = issueSchema.parse(
     runGitHub(args)
   );
@@ -111,11 +120,10 @@ export function getIssue(reference: string, repository?: string): GitHubIssue {
 }
 
 export function getRepository(reference?: string): GitHubRepository {
-  const args = ["repo", "view"];
+  const args = ["repo", "view", "--json", "nameWithOwner,url,defaultBranchRef"];
   if (reference) {
-    args.push(reference);
+    args.push("--", reference);
   }
-  args.push("--json", "nameWithOwner,url,defaultBranchRef");
   const repository = repositorySchema.parse(
     runGitHub(args)
   );
@@ -139,7 +147,7 @@ export function githubIsAuthenticated(): boolean {
 
 export function getPullRequest(reference: string): GitHubPullRequest {
   const pullRequest = pullRequestSchema.parse(
-    runGitHub(["pr", "view", reference, "--json", "number,url,state,headRefOid,baseRefName"])
+    runGitHub(["pr", "view", "--json", "number,url,state,headRefOid,baseRefName", "--", reference])
   );
 
   return {
@@ -154,7 +162,7 @@ export function getPullRequest(reference: string): GitHubPullRequest {
 export function getPullRequestChecks(reference: string): GitHubCheck[] {
   const checks = z.array(checkSchema).parse(
     runGitHubWithExitCodes(
-      ["pr", "checks", reference, "--json", "name,state,bucket,link"],
+      ["pr", "checks", "--json", "name,state,bucket,link", "--", reference],
       [0, 1, 8]
     )
   );
@@ -162,10 +170,11 @@ export function getPullRequestChecks(reference: string): GitHubCheck[] {
 }
 
 export function commentOnIssue(issueNumber: number, body: string, repository?: string): void {
-  const args = ["issue", "comment", String(issueNumber), "--body", body];
+  const args = ["issue", "comment", "--body", body];
   if (repository) {
     args.push("--repo", repository);
   }
+  args.push("--", String(issueNumber));
   const result = spawnSync("gh", args, {
     encoding: "utf8"
   });

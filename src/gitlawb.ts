@@ -52,12 +52,59 @@ function ownerKey(owner: string): string {
   return owner.replace(/^did:key:/, "");
 }
 
+const defaultNode = "https://node.gitlawb.com";
+const apiTimeoutSeconds = 30;
+
+/**
+ * Resolve the GitLawb node to query.
+ *
+ * This node decides a pull request's state and which push certificates exist,
+ * and those answers feed `cult verify` and therefore settlement. An operator
+ * can point CultOS at their own node, but not at a plaintext one: on http a
+ * network attacker chooses the verification result. Loopback is exempt so a
+ * node can be run locally during development.
+ */
+function apiNode(): string {
+  const configured = (process.env.GITLAWB_NODE ?? defaultNode).trim().replace(/\/$/, "");
+  let parsed: URL;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    throw new Error(`GITLAWB_NODE is not a valid URL: ${configured}`);
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) {
+    throw new Error(
+      `GITLAWB_NODE must use https (got ${parsed.protocol}//). `
+      + "Verification results from a plaintext node cannot be trusted."
+    );
+  }
+  return configured;
+}
+
 function api(path: string): unknown {
-  const node = (process.env.GITLAWB_NODE ?? "https://node.gitlawb.com").replace(/\/$/, "");
-  const result = spawnSync("curl", ["--fail", "--silent", "--show-error", `${node}${path}`], {
+  const result = spawnSync("curl", [
+    "--fail",
+    "--silent",
+    "--show-error",
+    "--proto",
+    "=https,http",
+    "--proto-redir",
+    "=https",
+    "--max-redirs",
+    "3",
+    "--max-time",
+    String(apiTimeoutSeconds),
+    "--",
+    `${apiNode()}${path}`
+  ], {
     encoding: "utf8",
-    maxBuffer: 10 * 1024 * 1024
+    maxBuffer: 10 * 1024 * 1024,
+    timeout: (apiTimeoutSeconds + 5) * 1000
   });
+  if (result.error && "code" in result.error && result.error.code === "ENOENT") {
+    throw new Error("curl is required to reach the GitLawb node but is not installed");
+  }
   if (result.status !== 0) {
     throw new Error(result.stderr.trim() || "GitLawb API request failed");
   }
@@ -109,8 +156,20 @@ export function getGitLawbRepository(reference?: string): RepositoryInfo {
   };
 }
 
+/**
+ * Extract the issue id from a reference.
+ *
+ * The id is passed to `gl` in a positional slot. Unlike `gh`, whose flag
+ * parsing was checked against the binary, `gl`'s handling of a `--` separator
+ * has not been verified here, so a leading dash is rejected outright rather
+ * than escaped.
+ */
 function issueId(reference: string): string {
-  return reference.match(/\/issues\/([^/]+)$/)?.[1] ?? reference;
+  const id = reference.match(/\/issues\/([^/]+)$/)?.[1] ?? reference;
+  if (id.startsWith("-")) {
+    throw new Error(`Invalid GitLawb issue reference: ${id}`);
+  }
+  return id;
 }
 
 export function getGitLawbIssue(reference: string, repository?: string): RepositoryIssue {

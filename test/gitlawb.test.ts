@@ -38,7 +38,8 @@ else
   exit 1
 fi`);
   executable("curl", `
-case "$4" in
+for argument in "$@"; do url="$argument"; done
+case "$url" in
   */pulls/1) printf '%s\\n' '{"number":1,"source_branch":"feature/fix","target_branch":"main","status":"open"}' ;;
   */certs) printf '%s\\n' '{"certificates":[{"id":"abcdef12","ref_name":"refs/heads/feature/fix","new_sha":"abc1234567890000000000000000000000000000"}]}' ;;
   *) exit 1 ;;
@@ -82,5 +83,38 @@ describe("GitLawb adapter", () => {
     expect(getGitLawbVerificationChecks(pullRequest)).toEqual([
       { name: "Signed push certificate", state: "verified", bucket: "pass" }
     ]);
+  });
+
+  it("refuses to trust a plaintext GitLawb node", () => {
+    const node = process.env.GITLAWB_NODE;
+    try {
+      process.env.GITLAWB_NODE = "http://node.example.com";
+      expect(() => getGitLawbPullRequest("gitlawb://did:key:z6MkOwner/example/pull/1"))
+        .toThrow(/must use https/);
+
+      process.env.GITLAWB_NODE = "not a url";
+      expect(() => getGitLawbPullRequest("gitlawb://did:key:z6MkOwner/example/pull/1"))
+        .toThrow(/not a valid URL/);
+    } finally {
+      if (node === undefined) delete process.env.GITLAWB_NODE;
+      else process.env.GITLAWB_NODE = node;
+    }
+  });
+
+  it("allows a loopback node for local development", () => {
+    const node = process.env.GITLAWB_NODE;
+    try {
+      process.env.GITLAWB_NODE = "http://localhost:8080";
+      expect(getGitLawbPullRequest("gitlawb://did:key:z6MkOwner/example/pull/1"))
+        .toMatchObject({ number: 1, state: "OPEN" });
+    } finally {
+      if (node === undefined) delete process.env.GITLAWB_NODE;
+      else process.env.GITLAWB_NODE = node;
+    }
+  });
+
+  it("rejects an issue reference that would read as a flag", () => {
+    expect(() => getGitLawbIssue("--dir=/etc", "z6MkOwner/example"))
+      .toThrow(/Invalid GitLawb issue reference/);
   });
 });
