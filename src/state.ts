@@ -137,35 +137,88 @@ function repositoryRoot(): string {
   }
 }
 
-const statePath = join(repositoryRoot(), ".cultos", "jobs.json");
+let resolvedStatePath: string | undefined;
+
+/**
+ * Where this repository's job state lives.
+ *
+ * Resolved on first use rather than at import. As a module-level constant this
+ * spawned `git rev-parse` every time the CLI started, including for
+ * `--version`, `--help` and `doctor`, and made the module impossible to import
+ * outside a git repository.
+ */
+function statePath(): string {
+  resolvedStatePath ??= join(repositoryRoot(), ".cultos", "jobs.json");
+  return resolvedStatePath;
+}
 
 function emptyState(): CultState {
-  return { version: 1, jobs: {} };
+  return { version: 1, jobs: Object.create(null) as CultState["jobs"] };
+}
+
+/**
+ * Fail on a job key that cannot survive being stored.
+ *
+ * A GitLawb issue id is an arbitrary string, so it can be `__proto__`.
+ * Assigning that to a plain object reassigns the prototype instead of adding a
+ * key, and the job serialises away to nothing -- after the ACP job already
+ * exists on-chain. zod does not help here: it drops the key from a record
+ * silently rather than reporting it, so the check has to run first.
+ *
+ * Only `__proto__` is rejected. Names like `constructor` are ordinary own
+ * properties once the map has a null prototype and lookups use Object.hasOwn.
+ */
+function assertStorableJobKeys(value: unknown): void {
+  if (!value || typeof value !== "object") return;
+  const jobs = (value as { jobs?: unknown }).jobs;
+  if (!jobs || typeof jobs !== "object") return;
+  if (Object.getOwnPropertyNames(jobs).includes("__proto__")) {
+    throw new Error(
+      "Job key __proto__ is a reserved name and cannot be stored. "
+      + "Remove that entry from the state file."
+    );
+  }
 }
 
 export function parseCultState(value: unknown): CultState {
-  return stateSchema.parse(value) as CultState;
+  assertStorableJobKeys(value);
+  const state = stateSchema.parse(value) as CultState;
+  // zod returns a plain object, so a lookup for an inherited name such as
+  // `toString` would return a function and pass a truthiness check.
+  return { ...state, jobs: Object.assign(Object.create(null), state.jobs) };
 }
 
+// One command reads the state up to four times: getJob, then updateJob's own
+// getJob and saveJob, then printJob. Each read re-parsed the whole file. The
+// CLI is one shot per process and writeState refreshes this, so a cache held
+// for the life of the process cannot go stale.
+let cachedState: CultState | undefined;
+
 function readState(): CultState {
+  if (cachedState) return cachedState;
+
   let contents: string;
   try {
-    contents = readFileSync(statePath, "utf8");
+    contents = readFileSync(statePath(), "utf8");
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return emptyState();
+      cachedState = emptyState();
+      return cachedState;
     }
     throw error;
   }
 
   try {
-    return parseCultState(JSON.parse(contents));
+    cachedState = parseCultState(JSON.parse(contents));
+    return cachedState;
   } catch (error) {
     const reason = error instanceof z.ZodError
       ? error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")
-      : "the file is not valid JSON";
+      : error instanceof SyntaxError
+        ? "the file is not valid JSON"
+        : error instanceof Error ? error.message : String(error);
     throw new Error(
-      `${statePath} was rejected: ${reason}. `
+      `${statePath()} was rejected: ${reason}. `
       + "A delivery recorded by an earlier release may predate the current validation; "
       + "remove the job entry or the file to start over."
     );
@@ -187,7 +240,8 @@ export function writeStateFile(path: string, state: CultState): void {
 }
 
 function writeState(state: CultState): void {
-  writeStateFile(statePath, state);
+  writeStateFile(statePath(), state);
+  cachedState = state;
 }
 
 export function jobReference(job: {
@@ -199,12 +253,15 @@ export function jobReference(job: {
 
 export function saveJob(job: CultJob): void {
   const state = readState();
-  state.jobs[jobReference(job)] = job;
-  writeState(state);
+  const jobs = Object.assign(Object.create(null) as CultState["jobs"], state.jobs);
+  jobs[jobReference(job)] = job;
+  writeState({ ...state, jobs });
 }
 
 export function getJob(issueNumber: number | string): CultJob {
-  const job = readState().jobs[String(issueNumber)];
+  const jobs = readState().jobs;
+  const key = String(issueNumber);
+  const job = Object.hasOwn(jobs, key) ? jobs[key] : undefined;
   if (!job) {
     throw new Error(`No CultOS job is linked to issue #${issueNumber}`);
   }
