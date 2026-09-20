@@ -15,6 +15,7 @@
     "postbuild": "node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
     "dev": "tsx src/cli.ts",
     "prepack": "npm run build",
+    "prepublishOnly": "npm run typecheck && npm test",
     "test": "vitest run --dir test",
     "typecheck": "tsc --noEmit"
   },

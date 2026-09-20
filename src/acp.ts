@@ -246,7 +246,7 @@ export function watchJob(jobId: string, timeout?: number, chainId = 8453): Watch
   if (["budget_set", "submitted", "completed", "rejected", "expired"].includes(history.status)) {
     return history;
   }
-  const args = ["job", "watch", "--job-id", jobId];
+  const args = ["job", "watch", "--job-id", jobId, "--chain-id", String(chainId)];
   if (timeout !== undefined) {
     args.push("--timeout", String(timeout));
   }

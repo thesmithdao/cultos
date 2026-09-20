@@ -34,10 +34,19 @@ import {
   commentOnRepositoryIssue,
   getRepositoryInfo,
   getRepositoryIssue,
-  getRepositoryPullRequest
+  getRepositoryPullRequest,
+  type RepositoryInfo,
+  type RepositoryIssue
 } from "./repository.js";
 import type { RepositoryPlatform } from "./contract.js";
-import { getJob, jobReference, listJobs, saveJob, updateJob } from "./state.js";
+import {
+  assertStorableJobReference,
+  getJob,
+  jobReference,
+  listJobs,
+  saveJob,
+  updateJob
+} from "./state.js";
 import { verifyJob, verifyReviewJob } from "./verify.js";
 
 const program = new Command();
@@ -46,11 +55,35 @@ const packageVersion = (JSON.parse(
 ) as { version: string }).version;
 
 function issueNumber(value: string): number {
-  const parsed = Number.parseInt(value, 10);
+  const fromUrl = value.match(/^https:\/\/[^/]*github\.com\/[^/]+\/[^/]+\/issues\/(\d+)$/)?.[1];
+  const parsed = Number.parseInt(fromUrl ?? value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`Invalid issue number: ${value}`);
+    throw new Error(
+      `Invalid issue reference: ${value}. Give an issue number or a GitHub issue URL.`
+    );
   }
   return parsed;
+}
+
+/**
+ * Refuse an issue that lives somewhere other than the resolved repository.
+ *
+ * `gh issue view` resolves a full URL against the repository in that URL and
+ * ignores `--repo`, so an issue reference from elsewhere would otherwise be
+ * paired with the local repository in the contract — and `settle` would post
+ * the receipt to the local repository at the foreign issue number.
+ *
+ * GitLawb builds its issue URL from the repository it already resolved, so
+ * the mismatch cannot arise there.
+ */
+function requireSameRepository(repository: RepositoryInfo, issue: RepositoryIssue): void {
+  if (repository.platform !== "github") return;
+  if (!issue.url.startsWith(`${repository.url}/issues/`)) {
+    throw new Error(
+      `Issue ${issue.url} does not belong to ${repository.nameWithOwner}. `
+      + "Pass --repo to work on another repository."
+    );
+  }
 }
 
 function platform(value?: string): RepositoryPlatform {
@@ -178,6 +211,7 @@ program
     const repositoryPlatform = platform(options.platform);
     const repository = getRepositoryInfo(options.repo, repositoryPlatform);
     const issue = getRepositoryIssue(reference, options.repo, repositoryPlatform);
+    requireSameRepository(repository, issue);
     const contract = createWorkContract({
       platform: repositoryPlatform,
       repositoryUrl: repository.url,
@@ -246,6 +280,7 @@ program
   .action((value: string, options: Record<string, string | undefined>) => {
     const repositoryPlatform = platform(options.platform);
     const number = issueReference(value, repositoryPlatform);
+    assertStorableJobReference(number);
     const reference = options.pr ? `${number}:review` : String(number);
     const existing = listJobs().find((job) => jobReference(job) === reference);
     if (existing) {
@@ -254,6 +289,7 @@ program
 
     const repository = getRepositoryInfo(options.repo, repositoryPlatform);
     const issue = getRepositoryIssue(value, options.repo, repositoryPlatform);
+    requireSameRepository(repository, issue);
     const pullRequest = options.pr ? getRepositoryPullRequest(options.pr) : undefined;
     if (pullRequest && repositoryPlatform !== "github") {
       throw new Error("Aeon reviews currently require GitHub");
@@ -289,7 +325,7 @@ program
       provider,
       ...(options.offering ? { offering: options.offering } : {}),
       chainId: chainId(options.chain ?? "8453"),
-      expiry: Number.parseInt(options.expiry ?? "86400", 10),
+      expiry: positiveInteger(options.expiry ?? "86400", "expiry"),
       contract
     });
     const now = new Date().toISOString();

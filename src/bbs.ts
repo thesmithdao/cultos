@@ -268,6 +268,73 @@ export function renderResult(
   );
 }
 
+export interface OutputBuffer {
+  /** Add a chunk of command output, discarding the oldest once over the limit. */
+  append(value: string): void;
+  /** Replace the buffer with a single value. */
+  set(value: string): void;
+  /** The buffer as one string, joined at most once per change. */
+  read(): string;
+}
+
+/**
+ * Collect command output without rebuilding it on every chunk.
+ *
+ * Appending to a single string reallocated the whole buffer each time, which
+ * turns a chatty command into quadratic work. Chunks are kept in a list, the
+ * oldest are dropped once the limit is passed, and the join happens only when
+ * a frame is actually drawn.
+ */
+export function createOutputBuffer(limit = 1024 * 1024): OutputBuffer {
+  const capacity = Math.max(0, Math.floor(limit));
+  let chunks: string[] = [];
+  let head = 0;
+  let length = 0;
+  let text = "";
+  let stale = false;
+
+  return {
+    append(value: string): void {
+      if (!value) return;
+      chunks.push(value);
+      length += value.length;
+      while (length > capacity && head < chunks.length) {
+        const excess = length - capacity;
+        const first = chunks[head]!;
+        if (first.length <= excess) {
+          length -= first.length;
+          head += 1;
+        } else {
+          chunks[head] = first.slice(excess);
+          length -= excess;
+        }
+      }
+      if (head > 1024 && head * 2 > chunks.length) {
+        chunks = chunks.slice(head);
+        head = 0;
+      }
+      stale = true;
+    },
+    set(value: string): void {
+      text = capacity === 0 ? "" : value.slice(-capacity);
+      chunks = text ? [text] : [];
+      head = 0;
+      length = text.length;
+      stale = false;
+    },
+    read(): string {
+      if (stale) {
+        text = chunks.slice(head).join("");
+        chunks = text ? [text] : [];
+        head = 0;
+        length = text.length;
+        stale = false;
+      }
+      return text;
+    }
+  };
+}
+
 export function runBbs(): void {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error("cult ui requires an interactive terminal");
@@ -277,7 +344,6 @@ export function runBbs(): void {
   let mode: "deck" | "detail" | "prompt" | "confirm" | "running" | "result" = "deck";
   let commandLine = "";
   let promptError = "";
-  let result = "";
   let exitCode = 0;
   let resultScroll = 0;
   let activeChild: ChildProcess | undefined;
@@ -286,6 +352,16 @@ export function runBbs(): void {
   let cancelling = false;
   let closed = false;
 
+  const output = createOutputBuffer();
+
+  let renderTimer: NodeJS.Timeout | undefined;
+  let renderedAt = 0;
+  let renderSuspended = false;
+  let renderMissed = false;
+
+  const result = (): string => output.read();
+  const setResult = (value: string): void => output.set(value);
+
   const dimensions = (): { columns: number; rows: number } => ({
     columns: Math.max(1, (process.stdout.columns ?? 95) - 1),
     rows: Math.max(1, (process.stdout.rows ?? 24) - 1)
@@ -293,6 +369,15 @@ export function runBbs(): void {
 
   const render = (): void => {
     if (closed) return;
+    if (renderSuspended) {
+      renderMissed = true;
+      return;
+    }
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+      renderTimer = undefined;
+    }
+    renderedAt = Date.now();
     const { columns, rows } = dimensions();
     if (columns < 72 || rows < 12) {
       const message = "CultOS needs a 72 × 12 terminal.";
@@ -308,26 +393,46 @@ export function runBbs(): void {
           : mode === "running"
             ? renderRunning(
               commandLine,
-              result,
+              result(),
               Math.floor((Date.now() - runningSince) / 1000),
               columns,
               rows,
               cancelling
             )
           : mode === "result"
-            ? renderResult(result, exitCode, columns, rows, resultScroll)
+            ? renderResult(result(), exitCode, columns, rows, resultScroll)
             : renderDeck(selected, columns, rows);
     process.stdout.write(`${ESC}H${ESC}2J${screen}`);
   };
 
+  // A command that writes quickly would otherwise repaint the whole screen once
+  // per chunk. Frames are coalesced instead, so output stays readable without
+  // the redraw cost growing with how talkative the command is.
+  const frameInterval = 50;
+
+  const scheduleRender = (): void => {
+    if (renderTimer || closed) return;
+    const wait = Math.max(0, frameInterval - (Date.now() - renderedAt));
+    renderTimer = setTimeout(() => {
+      renderTimer = undefined;
+      render();
+    }, wait);
+    renderTimer.unref();
+  };
+
   const appendResult = (value: string): void => {
-    result = `${result}${value}`.slice(-1024 * 1024);
-    render();
+    output.append(value);
+    scheduleRender();
   };
 
   const stopRunningTimer = (): void => {
     if (runningTimer) clearInterval(runningTimer);
     runningTimer = undefined;
+  };
+
+  const stopRenderTimer = (): void => {
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = undefined;
   };
 
   const cancelActiveCommand = (): void => {
@@ -358,7 +463,7 @@ export function runBbs(): void {
     }
 
     mode = "running";
-    result = "";
+    setResult("");
     resultScroll = 0;
     exitCode = 0;
     cancelling = false;
@@ -381,9 +486,11 @@ export function runBbs(): void {
       if (executionFinished) return;
       executionFinished = true;
       stopRunningTimer();
+      stopRenderTimer();
       activeChild = undefined;
       exitCode = 1;
-      result = `${result}${result ? "\n" : ""}${error.message}`.trim();
+      const current = result();
+      setResult(`${current}${current ? "\n" : ""}${error.message}`.trim());
       mode = "result";
       render();
     });
@@ -391,10 +498,13 @@ export function runBbs(): void {
       if (executionFinished) return;
       executionFinished = true;
       stopRunningTimer();
+      stopRenderTimer();
       activeChild = undefined;
       exitCode = cancelling ? 130 : (code ?? (signal ? 1 : 0));
-      if (cancelling) result = `${result}${result ? "\n" : ""}Command cancelled.`;
-      result = result.trim();
+      const current = result();
+      setResult(cancelling
+        ? `${current}${current ? "\n" : ""}Command cancelled.`.trim()
+        : current.trim());
       resultScroll = 0;
       mode = "result";
       render();
@@ -424,6 +534,7 @@ export function runBbs(): void {
     closed = true;
     cancelActiveCommand();
     stopRunningTimer();
+    stopRenderTimer();
     process.stdout.off("resize", render);
     process.stdin.off("data", onInput);
     process.off("SIGTERM", onSignal);
@@ -439,16 +550,34 @@ export function runBbs(): void {
     process.exit(1);
   };
 
+  const navigationKeys = new Set(["\u001b[A", "\u001b[B", "\u001b[5~", "\u001b[6~"]);
+
+  /**
+   * Handle one key, or one pasted run of them.
+   *
+   * A multi-character read is a paste. Each character is dispatched directly
+   * rather than re-emitted on the stream: re-emitting redrew the whole screen
+   * once per character, and a character outside the Basic Multilingual Plane
+   * re-entered this function with the same multi-character value, which
+   * recursed until the stack ran out.
+   */
   const onInput = (input: Buffer): void => {
     const value = input.toString();
-    const navigationKeys = new Set(["\u001b[A", "\u001b[B", "\u001b[5~", "\u001b[6~"]);
     if (value.length > 1 && !navigationKeys.has(value)) {
-      for (const character of value) {
-        process.stdin.emit("data", Buffer.from(character));
+      renderSuspended = true;
+      renderMissed = false;
+      try {
+        for (const character of value) handleKey(character);
+      } finally {
+        renderSuspended = false;
       }
+      if (renderMissed) render();
       return;
     }
-    const key = value;
+    handleKey(value);
+  };
+
+  function handleKey(key: string): void {
     if (mode === "running") {
       if (key === "\u0003" || key === "\u001b") cancelActiveCommand();
       else if (key === "q") quit();
@@ -494,14 +623,14 @@ export function runBbs(): void {
     } else if (mode === "result" && (key === "\u001b[B" || key === "j")) {
       const { columns, rows } = dimensions();
       const width = Math.max(72, Math.min(columns, 100));
-      resultScroll = Math.min(resultScrollLimit(result, exitCode, width, rows), resultScroll + 1);
+      resultScroll = Math.min(resultScrollLimit(result(), exitCode, width, rows), resultScroll + 1);
     } else if (mode === "result" && key === "\u001b[5~") {
       resultScroll = Math.max(0, resultScroll - Math.max(1, dimensions().rows - 7));
     } else if (mode === "result" && key === "\u001b[6~") {
       const { columns, rows } = dimensions();
       const width = Math.max(72, Math.min(columns, 100));
       resultScroll = Math.min(
-        resultScrollLimit(result, exitCode, width, rows),
+        resultScrollLimit(result(), exitCode, width, rows),
         resultScroll + Math.max(1, rows - 7)
       );
     } else if (key === "\r") {
@@ -516,7 +645,7 @@ export function runBbs(): void {
       selected = Number(key) - 1;
     }
     render();
-  };
+  }
 
   process.stdin.setRawMode(true);
   process.stdin.resume();

@@ -20,7 +20,43 @@ jobs:
           name: Build
           command: npm run build
 
+  verify-node-20:
+    docker:
+      - image: cimg/node:20.19
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm ci
+      - run:
+          name: Typecheck
+          command: npm run typecheck
+      - run:
+          name: Test
+          command: npm test
+      - run:
+          name: Build
+          command: npm run build
+
+  audit:
+    docker:
+      - image: cimg/node:22.18
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm ci
+      # Reports known advisories without gating the merge. Drop the `|| true`
+      # to make it blocking once the signal proves stable.
+      - run:
+          name: Audit dependencies
+          command: npm audit --audit-level=high || true
+
 workflows:
   verify:
     jobs:
       - verify
+      - verify-node-20
+      - audit

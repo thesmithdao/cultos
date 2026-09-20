@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  createOutputBuffer,
   parseCommandLine,
   renderCommand,
   renderConfirmation,
@@ -120,5 +121,63 @@ describe("BBS command deck", () => {
       expect(renderDeck(0, 80, rows).split("\n")).toHaveLength(rows);
       expect(renderResult("System ready.", 0, 80, rows).split("\n")).toHaveLength(rows);
     }
+  });
+});
+
+describe("createOutputBuffer", () => {
+  test("reads back everything appended", () => {
+    const output = createOutputBuffer();
+    output.append("one\n");
+    output.append("two\n");
+    output.append("three");
+
+    expect(output.read()).toBe("one\ntwo\nthree");
+  });
+
+  test("keeps the tail once the limit is passed", () => {
+    const output = createOutputBuffer(10);
+    output.append("123456");
+    output.append("789012");
+
+    expect(output.read()).toBe("3456789012");
+  });
+
+  test("truncates a single chunk that alone exceeds the limit", () => {
+    const output = createOutputBuffer(4);
+    output.append("old");
+    output.append("a much longer chunk");
+
+    // The newest output wins: the tail is kept and the limit still holds.
+    expect(output.read()).toBe("hunk");
+  });
+
+  test("set replaces the buffer", () => {
+    const output = createOutputBuffer(4);
+    output.append("discarded");
+    output.set("not-kept");
+
+    expect(output.read()).toBe("kept");
+
+    output.set("");
+    expect(output.read()).toBe("");
+  });
+
+  test("repeated reads without changes return the same value", () => {
+    const output = createOutputBuffer();
+    output.append("stable");
+
+    expect(output.read()).toBe("stable");
+    expect(output.read()).toBe("stable");
+  });
+
+  test("retains the bounded tail after many chunks", () => {
+    const output = createOutputBuffer(1024);
+    for (let index = 0; index < 20_000; index += 1) {
+      output.append(String(index).padStart(6, "0"));
+    }
+
+    const value = output.read();
+    expect(value).toHaveLength(1024);
+    expect(value.endsWith("019999")).toBe(true);
   });
 });

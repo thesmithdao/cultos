@@ -1,7 +1,38 @@
 import { spawnSync } from "node:child_process";
 import pc from "picocolors";
+import { z } from "zod";
 import { commandExists, githubIsAuthenticated } from "./github.js";
 import { parseGitLawbRemote } from "./gitlawb.js";
+
+// Matches agentValue in acp.ts: an agent name is printed to the terminal, so
+// escape sequences are rejected rather than displayed.
+const agentText = z.string().min(1).max(200)
+  .refine((value) => !/[\u0000-\u001f\u007f-\u009f]/.test(value));
+const agentSchema = z.object({
+  name: agentText,
+  walletAddress: agentText
+}).passthrough();
+
+const signerSchema = z.object({
+  matched: z.boolean().optional(),
+  signerId: z.string().optional(),
+  signers: z.array(z.unknown()).optional()
+}).passthrough();
+
+/**
+ * Read a JSON response without letting a malformed one end the run.
+ *
+ * `cult doctor` is what a maintainer reaches for when something is already
+ * broken, so an ACP CLI that prints a warning line before its JSON, or no
+ * JSON at all, has to surface as a failed check rather than a stack trace.
+ */
+function parsed<T>(schema: z.ZodType<T>, value: string): T | undefined {
+  try {
+    return schema.parse(JSON.parse(value.trim()));
+  } catch {
+    return undefined;
+  }
+}
 
 interface Check {
   name: string;
@@ -58,22 +89,35 @@ function acpChecks(hasAcp: boolean): Check[] {
     ];
   }
 
-  const agent = JSON.parse(identity.stdout) as { name: string; walletAddress: string };
+  const agent = parsed(agentSchema, identity.stdout);
+  if (!agent) {
+    return [
+      { name: "ACP CLI", ok: true, detail: "installed" },
+      { name: "Agent", ok: false, detail: "unreadable response" },
+      { name: "Signer", ok: false, detail: "unavailable" }
+    ];
+  }
+
   const signer = spawnSync("acp", ["agent", "signer-policy", "--json"], {
     encoding: "utf8"
   });
-  const signerState = signer.status === 0
-    ? JSON.parse(signer.stdout) as { matched?: boolean; signers?: unknown[]; signerId?: string }
-    : {};
-  const hasSigner = Boolean(signerState.signerId)
-    || signerState.matched === true
-    || (signerState.signers?.length ?? 0) > 0;
-  const wallet = `${agent.walletAddress.slice(0, 6)}…${agent.walletAddress.slice(-4)}`;
+  const signerState = signer.status === 0 ? parsed(signerSchema, signer.stdout) : undefined;
+  const hasSigner = Boolean(signerState?.signerId)
+    || signerState?.matched === true
+    || (signerState?.signers?.length ?? 0) > 0;
+  const signerDetail = signer.status !== 0
+    ? "unavailable"
+    : signerState === undefined
+      ? "unreadable response"
+      : hasSigner ? "ready" : "approval required";
+  const wallet = agent.walletAddress.length > 10
+    ? `${agent.walletAddress.slice(0, 6)}…${agent.walletAddress.slice(-4)}`
+    : agent.walletAddress;
 
   return [
     { name: "ACP CLI", ok: true, detail: "installed" },
     { name: "Agent", ok: true, detail: `${agent.name} ${wallet}` },
-    { name: "Signer", ok: hasSigner, detail: hasSigner ? "ready" : "approval required" }
+    { name: "Signer", ok: hasSigner, detail: signerDetail }
   ];
 }
 
