@@ -71,10 +71,55 @@ export interface AeonReviewDelivery {
 export type CultWorkContract = IssueWorkContract | ReviewWorkContract;
 export type CultDelivery = PullRequestDelivery | AeonReviewDelivery;
 
+const controlCharacters = /[\u0000-\u001f\u007f-\u009f]/;
+const gitlawbPullRequestUrl =
+  /^gitlawb:\/\/(?:did:key:[A-Za-z0-9]+|[A-Za-z0-9._-]+)\/[A-Za-z0-9._-]+\/pulls?\/[1-9]\d*$/;
+
+/**
+ * Remote text the CLI prints on a single line.
+ *
+ * Control characters are rejected at the schema boundary so a provider cannot
+ * smuggle escape sequences into `cult verify` output or a settlement receipt.
+ */
+export function plainText(max: number): z.ZodType<string> {
+  return z.string().min(1).max(max).refine((value) => !controlCharacters.test(value), {
+    message: "must not contain control characters"
+  });
+}
+
+/** An https URL, rejecting every other scheme. */
+export const httpsUrl = z.string().min(1).max(2048).refine((value) => {
+  if (controlCharacters.test(value)) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}, { message: "must be an https URL" });
+
+/**
+ * A delivered pull-request location.
+ *
+ * This string is handed to `gh pr view` as an argument, printed to the
+ * terminal and interpolated into the settlement receipt, so it is constrained
+ * to the two shapes CultOS actually produces. `gitlawb://` is matched by
+ * pattern rather than parsed: WHATWG URL rejects a `did:key:` authority
+ * because the colons read as a port.
+ */
+export const deliveryUrl = z.string().min(1).max(2048).refine((value) => {
+  if (controlCharacters.test(value)) return false;
+  if (value.startsWith("gitlawb://")) return gitlawbPullRequestUrl.test(value);
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}, { message: "must be an https URL or a gitlawb:// pull request" });
+
 const pullRequestDeliverySchema = z.object({
   kind: z.union([z.literal(pullRequestDeliveryKind), z.literal(gitlawbPullRequestDeliveryKind)]),
-  url: z.string().min(1),
-  headSha: z.string().min(7)
+  url: deliveryUrl,
+  headSha: z.string().regex(/^[0-9a-f]{7,64}$/)
 });
 
 const aeonReviewDeliverySchema = z.object({
@@ -85,21 +130,21 @@ const aeonReviewDeliverySchema = z.object({
   pull_request: z.number().int().positive(),
   head_sha: z.string().regex(/^[0-9a-f]{40}$/),
   verdict: z.enum(["approve-ready", "discussion-needed", "blocked"]),
-  summary: z.string().min(1).max(240),
+  summary: plainText(240),
   findings: z.array(z.object({
     severity: z.enum(["critical", "high", "medium"]),
-    path: z.string().min(1),
+    path: plainText(512),
     line: z.number().int().positive().nullable(),
-    title: z.string().min(1),
-    consequence: z.string().min(1)
+    title: plainText(240),
+    consequence: plainText(500)
   })).max(5),
-  reviewed_files: z.array(z.string()),
-  limitations: z.array(z.string()),
+  reviewed_files: z.array(plainText(512)).max(500),
+  limitations: z.array(plainText(500)).max(50),
   run: z.object({
     id: z.number().int().positive(),
-    url: z.url(),
-    model: z.string().min(1),
-    gateway: z.string().min(1),
+    url: httpsUrl,
+    model: plainText(120),
+    gateway: plainText(120),
     usage: z.object({
       input_tokens: z.number().int().nonnegative(),
       output_tokens: z.number().int().nonnegative()

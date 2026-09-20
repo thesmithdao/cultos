@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
+import { deliveryUrl, httpsUrl, plainText } from "./contract.js";
 import type { CultDelivery, CultWorkContract } from "./contract.js";
 
 export interface CultJob {
@@ -57,8 +58,8 @@ const deliverySchema = z.object({
     z.literal("cultos.github.pull-request.v1"),
     z.literal("cultos.gitlawb.pull-request.v1")
   ]),
-  url: z.string().min(1),
-  headSha: z.string().min(7)
+  url: deliveryUrl,
+  headSha: z.string().regex(/^[0-9a-f]{7,64}$/)
 });
 
 const reviewDeliverySchema = z.object({
@@ -69,21 +70,21 @@ const reviewDeliverySchema = z.object({
   pull_request: z.number().int().positive(),
   head_sha: z.string().regex(/^[0-9a-f]{40}$/),
   verdict: z.enum(["approve-ready", "discussion-needed", "blocked"]),
-  summary: z.string().min(1).max(240),
+  summary: plainText(240),
   findings: z.array(z.object({
     severity: z.enum(["critical", "high", "medium"]),
-    path: z.string().min(1),
+    path: plainText(512),
     line: z.number().int().positive().nullable(),
-    title: z.string().min(1),
-    consequence: z.string().min(1)
+    title: plainText(240),
+    consequence: plainText(500)
   })).max(5),
-  reviewed_files: z.array(z.string()),
-  limitations: z.array(z.string()),
+  reviewed_files: z.array(plainText(512)).max(500),
+  limitations: z.array(plainText(500)).max(50),
   run: z.object({
     id: z.number().int().positive(),
-    url: z.string().min(1),
-    model: z.string().min(1),
-    gateway: z.string().min(1),
+    url: httpsUrl,
+    model: plainText(120),
+    gateway: plainText(120),
     usage: z.object({
       input_tokens: z.number().int().nonnegative(),
       output_tokens: z.number().int().nonnegative()
@@ -147,13 +148,27 @@ export function parseCultState(value: unknown): CultState {
 }
 
 function readState(): CultState {
+  let contents: string;
   try {
-    return parseCultState(JSON.parse(readFileSync(statePath, "utf8")));
+    contents = readFileSync(statePath, "utf8");
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return emptyState();
     }
     throw error;
+  }
+
+  try {
+    return parseCultState(JSON.parse(contents));
+  } catch (error) {
+    const reason = error instanceof z.ZodError
+      ? error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")
+      : "the file is not valid JSON";
+    throw new Error(
+      `${statePath} was rejected: ${reason}. `
+      + "A delivery recorded by an earlier release may predate the current validation; "
+      + "remove the job entry or the file to start over."
+    );
   }
 }
 

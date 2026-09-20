@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { plain } from "./display.js";
 
 const ESC = "\u001b[";
 
@@ -45,13 +46,6 @@ function mutates(args: string[]): boolean {
 
 function commandAt(index: number): DeckCommand {
   return commands[index] ?? commands[0]!;
-}
-
-function plain(value: string): string {
-  return value
-    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
 }
 
 function fit(value: string, width: number): string {
