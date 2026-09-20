@@ -2,8 +2,12 @@ version: 2.1
 
 jobs:
   verify:
+    parameters:
+      node:
+        description: cimg/node tag to run against
+        type: string
     docker:
-      - image: cimg/node:22.18
+      - image: cimg/node:<< parameters.node >>
     resource_class: small
     steps:
       - checkout
@@ -20,7 +24,27 @@ jobs:
           name: Build
           command: npm run build
 
+  audit:
+    docker:
+      - image: cimg/node:22.18
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm ci
+      # Reports known advisories without gating the merge. Drop the `|| true`
+      # to make it blocking once the signal proves stable.
+      - run:
+          name: Audit dependencies
+          command: npm audit --audit-level=high || true
+
 workflows:
   verify:
     jobs:
-      - verify
+      # package.json declares engines.node >= 20, so both supported majors run.
+      - verify:
+          matrix:
+            parameters:
+              node: ["20.19", "22.18"]
+      - audit
