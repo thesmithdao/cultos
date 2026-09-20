@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  createOutputBuffer,
   parseCommandLine,
   renderCommand,
   renderConfirmation,
@@ -120,5 +121,75 @@ describe("BBS command deck", () => {
       expect(renderDeck(0, 80, rows).split("\n")).toHaveLength(rows);
       expect(renderResult("System ready.", 0, 80, rows).split("\n")).toHaveLength(rows);
     }
+  });
+});
+
+describe("createOutputBuffer", () => {
+  test("reads back everything appended", () => {
+    const output = createOutputBuffer();
+    output.append("one\n");
+    output.append("two\n");
+    output.append("three");
+
+    expect(output.read()).toBe("one\ntwo\nthree");
+  });
+
+  test("keeps the tail once the limit is passed", () => {
+    const output = createOutputBuffer(10);
+    output.append("aaaaa");
+    output.append("bbbbb");
+    output.append("ccccc");
+
+    const value = output.read();
+    expect(value.length).toBeLessThanOrEqual(10);
+    expect(value.endsWith("ccccc")).toBe(true);
+  });
+
+  test("truncates a single chunk that alone exceeds the limit", () => {
+    const output = createOutputBuffer(4);
+    output.append("old");
+    output.append("a much longer chunk");
+
+    // The newest output wins: the tail is kept and the limit still holds.
+    expect(output.read()).toBe("hunk");
+  });
+
+  test("set replaces the buffer", () => {
+    const output = createOutputBuffer();
+    output.append("discarded");
+    output.set("kept");
+
+    expect(output.read()).toBe("kept");
+
+    output.set("");
+    expect(output.read()).toBe("");
+  });
+
+  test("repeated reads without changes return the same value", () => {
+    const output = createOutputBuffer();
+    output.append("stable");
+
+    expect(output.read()).toBe("stable");
+    expect(output.read()).toBe("stable");
+  });
+
+  test("appending many chunks stays linear rather than quadratic", () => {
+    // The previous implementation rebuilt the whole string per chunk, so cost
+    // grew with the square of the output size. Ten times the chunks should
+    // cost roughly ten times as much, not a hundred.
+    const measure = (chunks: number): number => {
+      const output = createOutputBuffer();
+      const chunk = "x".repeat(512);
+      const started = process.hrtime.bigint();
+      for (let index = 0; index < chunks; index += 1) output.append(chunk);
+      output.read();
+      return Number(process.hrtime.bigint() - started);
+    };
+
+    measure(2_000);
+    const small = Math.max(measure(2_000), 1);
+    const large = measure(20_000);
+
+    expect(large / small).toBeLessThan(40);
   });
 });
