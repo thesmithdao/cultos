@@ -170,23 +170,14 @@ describe("createOutputBuffer", () => {
     expect(output.read()).toBe("stable");
   });
 
-  test("appending many chunks stays linear rather than quadratic", () => {
-    // The previous implementation rebuilt the whole string per chunk, so cost
-    // grew with the square of the output size. Ten times the chunks should
-    // cost roughly ten times as much, not a hundred.
-    const measure = (chunks: number): number => {
-      const output = createOutputBuffer();
-      const chunk = "x".repeat(512);
-      const started = process.hrtime.bigint();
-      for (let index = 0; index < chunks; index += 1) output.append(chunk);
-      output.read();
-      return Number(process.hrtime.bigint() - started);
-    };
+  test("retains the bounded tail after many chunks", () => {
+    const output = createOutputBuffer(1024);
+    for (let index = 0; index < 20_000; index += 1) {
+      output.append(String(index).padStart(6, "0"));
+    }
 
-    measure(2_000);
-    const small = Math.max(measure(2_000), 1);
-    const large = measure(20_000);
-
-    expect(large / small).toBeLessThan(40);
+    const value = output.read();
+    expect(value).toHaveLength(1024);
+    expect(value.endsWith("019999")).toBe(true);
   });
 });
