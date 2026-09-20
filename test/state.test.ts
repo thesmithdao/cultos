@@ -2,7 +2,13 @@ import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import { jobReference, parseCultState, writeStateFile, type CultState } from "../src/state.js";
+import {
+  assertStorableJobReference,
+  jobReference,
+  parseCultState,
+  writeStateFile,
+  type CultState
+} from "../src/state.js";
 
 const state: CultState = {
   version: 1,
@@ -61,6 +67,11 @@ describe("state keys that mean something to a plain object", () => {
 
     expect(Object.hasOwn(state.jobs, "__proto__")).toBe(true);
     expect(() => parseCultState(state)).toThrow();
+  });
+
+  test("rejects a reserved issue id before creating or saving a job", () => {
+    expect(() => assertStorableJobReference("__proto__")).toThrow(/reserved/);
+    expect(() => assertStorableJobReference("constructor")).not.toThrow();
   });
 
   test("shows why a reserved name had to be rejected", () => {

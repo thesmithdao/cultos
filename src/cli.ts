@@ -39,7 +39,14 @@ import {
   type RepositoryIssue
 } from "./repository.js";
 import type { RepositoryPlatform } from "./contract.js";
-import { getJob, jobReference, listJobs, saveJob, updateJob } from "./state.js";
+import {
+  assertStorableJobReference,
+  getJob,
+  jobReference,
+  listJobs,
+  saveJob,
+  updateJob
+} from "./state.js";
 import { verifyJob, verifyReviewJob } from "./verify.js";
 
 const program = new Command();
@@ -273,6 +280,7 @@ program
   .action((value: string, options: Record<string, string | undefined>) => {
     const repositoryPlatform = platform(options.platform);
     const number = issueReference(value, repositoryPlatform);
+    assertStorableJobReference(number);
     const reference = options.pr ? `${number}:review` : String(number);
     const existing = listJobs().find((job) => jobReference(job) === reference);
     if (existing) {

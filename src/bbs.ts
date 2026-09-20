@@ -286,7 +286,9 @@ export interface OutputBuffer {
  * a frame is actually drawn.
  */
 export function createOutputBuffer(limit = 1024 * 1024): OutputBuffer {
+  const capacity = Math.max(0, Math.floor(limit));
   let chunks: string[] = [];
+  let head = 0;
   let length = 0;
   let text = "";
   let stale = false;
@@ -296,22 +298,35 @@ export function createOutputBuffer(limit = 1024 * 1024): OutputBuffer {
       if (!value) return;
       chunks.push(value);
       length += value.length;
-      while (length > limit && chunks.length > 1) {
-        length -= chunks.shift()!.length;
+      while (length > capacity && head < chunks.length) {
+        const excess = length - capacity;
+        const first = chunks[head]!;
+        if (first.length <= excess) {
+          length -= first.length;
+          head += 1;
+        } else {
+          chunks[head] = first.slice(excess);
+          length -= excess;
+        }
+      }
+      if (head > 1024 && head * 2 > chunks.length) {
+        chunks = chunks.slice(head);
+        head = 0;
       }
       stale = true;
     },
     set(value: string): void {
-      chunks = value ? [value] : [];
-      length = value.length;
-      text = value;
+      text = capacity === 0 ? "" : value.slice(-capacity);
+      chunks = text ? [text] : [];
+      head = 0;
+      length = text.length;
       stale = false;
     },
     read(): string {
       if (stale) {
-        text = chunks.join("");
-        if (text.length > limit) text = text.slice(-limit);
-        chunks = [text];
+        text = chunks.slice(head).join("");
+        chunks = text ? [text] : [];
+        head = 0;
         length = text.length;
         stale = false;
       }

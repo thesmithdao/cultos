@@ -2,12 +2,27 @@ version: 2.1
 
 jobs:
   verify:
-    parameters:
-      node:
-        description: cimg/node tag to run against
-        type: string
     docker:
-      - image: cimg/node:<< parameters.node >>
+      - image: cimg/node:22.18
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm ci
+      - run:
+          name: Typecheck
+          command: npm run typecheck
+      - run:
+          name: Test
+          command: npm test
+      - run:
+          name: Build
+          command: npm run build
+
+  verify-node-20:
+    docker:
+      - image: cimg/node:20.19
     resource_class: small
     steps:
       - checkout
@@ -42,9 +57,6 @@ jobs:
 workflows:
   verify:
     jobs:
-      # package.json declares engines.node >= 20, so both supported majors run.
-      - verify:
-          matrix:
-            parameters:
-              node: ["20.19", "22.18"]
+      - verify
+      - verify-node-20
       - audit

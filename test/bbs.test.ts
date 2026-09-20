@@ -136,13 +136,10 @@ describe("createOutputBuffer", () => {
 
   test("keeps the tail once the limit is passed", () => {
     const output = createOutputBuffer(10);
-    output.append("aaaaa");
-    output.append("bbbbb");
-    output.append("ccccc");
+    output.append("123456");
+    output.append("789012");
 
-    const value = output.read();
-    expect(value.length).toBeLessThanOrEqual(10);
-    expect(value.endsWith("ccccc")).toBe(true);
+    expect(output.read()).toBe("3456789012");
   });
 
   test("truncates a single chunk that alone exceeds the limit", () => {
@@ -155,9 +152,9 @@ describe("createOutputBuffer", () => {
   });
 
   test("set replaces the buffer", () => {
-    const output = createOutputBuffer();
+    const output = createOutputBuffer(4);
     output.append("discarded");
-    output.set("kept");
+    output.set("not-kept");
 
     expect(output.read()).toBe("kept");
 

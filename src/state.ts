@@ -180,6 +180,12 @@ function assertStorableJobKeys(value: unknown): void {
   }
 }
 
+export function assertStorableJobReference(value: number | string): void {
+  if (String(value) === "__proto__") {
+    throw new Error("Issue reference __proto__ is reserved and cannot be stored");
+  }
+}
+
 export function parseCultState(value: unknown): CultState {
   assertStorableJobKeys(value);
   const state = stateSchema.parse(value) as CultState;
@@ -252,6 +258,7 @@ export function jobReference(job: {
 }
 
 export function saveJob(job: CultJob): void {
+  assertStorableJobReference(job.issueNumber);
   const state = readState();
   const jobs = Object.assign(Object.create(null) as CultState["jobs"], state.jobs);
   jobs[jobReference(job)] = job;
