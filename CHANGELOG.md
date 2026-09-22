@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+Cult OS now treats remote terminal text, persisted job data, repository references, and subprocess arguments as explicit trust boundaries. The CLI rejects malformed delivery and state records, prevents terminal control-sequence injection, hardens GitHub and GitLawb argument handling, requires secure GitLawb transport outside loopback development, and remains responsive under sustained terminal output. Release publication now runs typecheck and tests before packing.
+
 ## 0.5.0
 
 Cult OS returns to a lean ACP core. Sibyl Memory commands and the MCP SDK dependency are not included in the 0.5.x track. Users who rely on repository memory remain on the security-maintained 0.4.x track.
