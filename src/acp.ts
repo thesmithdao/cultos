@@ -51,6 +51,7 @@ export interface WatchedJob {
   availableTools: string[];
   budget?: string;
   deliverable?: unknown;
+  providerMessage?: string;
   exitCode: number;
   raw: unknown;
 }
@@ -223,7 +224,15 @@ export function jobHistory(jobId: string, chainId = 8453): WatchedJob {
   }
   let budget = history.budget;
   let deliverable = history.deliverable;
+  let provider: string | undefined;
+  let providerMessage: string | undefined;
   for (const entry of history.entries) {
+    const created = eventValue(entry, "provider");
+    if (eventValue(entry, "type") === "job.created" && typeof created === "string") provider = created.toLowerCase();
+    const message = entry as { from?: unknown; contentType?: unknown; content?: unknown };
+    if (provider && typeof message.from === "string" && message.from.toLowerCase() === provider && message.contentType === "text" && typeof message.content === "string") {
+      providerMessage = message.content.slice(0, 300);
+    }
     if (eventValue(entry, "type") === "budget.set") {
       budget = z.union([z.string(), z.number()]).parse(eventValue(entry, "amount"));
     }
@@ -236,6 +245,7 @@ export function jobHistory(jobId: string, chainId = 8453): WatchedJob {
     availableTools: [],
     ...(budget !== undefined ? { budget: String(budget) } : {}),
     ...(deliverable !== undefined ? { deliverable } : {}),
+    ...(providerMessage !== undefined ? { providerMessage } : {}),
     exitCode: 0,
     raw: history
   };
@@ -246,7 +256,7 @@ export function watchJob(jobId: string, timeout?: number, chainId = 8453): Watch
   if (["budget_set", "submitted", "completed", "rejected", "expired"].includes(history.status)) {
     return history;
   }
-  const args = ["job", "watch", "--job-id", jobId, "--chain-id", String(chainId)];
+  const args = ["job", "watch", "--job-id", jobId];
   if (timeout !== undefined) {
     args.push("--timeout", String(timeout));
   }
@@ -273,6 +283,7 @@ export function watchJob(jobId: string, timeout?: number, chainId = 8453): Watch
     availableTools: watch.availableTools ?? [],
     ...(budget !== undefined ? { budget: String(budget) } : {}),
     ...(deliverable !== undefined ? { deliverable } : {}),
+    ...(recovered.providerMessage !== undefined ? { providerMessage: recovered.providerMessage } : {}),
     exitCode: result.exitCode,
     raw: result.data
   };

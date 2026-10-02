@@ -29,6 +29,10 @@ import { runBbs } from "./bbs.js";
 import { cell, plain, safe } from "./display.js";
 import { runDoctor } from "./doctor.js";
 import { runStart } from "./start.js";
+import { runBuildMachine, runBuildX402 } from "./builder.js";
+import { printFindings, runHandshake } from "./handshake.js";
+import { interactiveTerminal, terminal } from "./prompt.js";
+import { checkEndpoint, passed } from "./x402.js";
 import {
   detectRepositoryPlatform,
   commentOnRepositoryIssue,
@@ -192,14 +196,87 @@ function printJob(issue: number | string): void {
 
 program
   .name("cult")
-  .description("Repository work for the agent economy.")
+  .description("Build for the machine economy.")
   .version(packageVersion);
 
 program.command("doctor").description("Check the local repository and ACP setup").action(runDoctor);
 program.command("ui").description("Open the CultOS command deck").action(runBbs);
-program.command("start").description("Set up CultOS and open the terminal").action(async () => {
+program.command("start").description("Start here: build an x402 API, a machine, or hire agents for repo work").action(async () => {
   if (!await runStart()) process.exitCode = 1;
 });
+
+const build = program.command("build").description("Build a paid x402 API or a machine that sells its data");
+
+build
+  .command("x402")
+  .argument("[folder]", "new, empty folder for the project")
+  .option("--name <name>", "project name")
+  .option("--rails <rails>", "base, solana or base,solana")
+  .option("--price <usd>", "price per call in USD")
+  .option("--description <text>", "what it sells")
+  .option("--pay-to-base <address>", "Base payout address")
+  .option("--pay-to-solana <address>", "Solana payout address")
+  .option("--mainnet", "start on mainnet instead of testnet")
+  .description("Build a paid x402 API from Coinbase's official Express example")
+  .action(async (folder: string | undefined, options: { name?: string; rails?: string; price?: string; description?: string; payToBase?: string; payToSolana?: string; mainnet?: boolean }) => {
+    await runBuildX402(folder, options, interactiveTerminal() ? terminal : undefined);
+  });
+
+build
+  .command("machine")
+  .argument("[folder]", "new, empty folder for the project")
+  .option("--device <device>", "mac or linux")
+  .option("--name <name>", "project name")
+  .option("--payout <address>", "Base payout address")
+  .option("--price <usd>", "price per reading in USD")
+  .option("--broker <url>", "broker URL for a Linux server")
+  .option("--mainnet", "start on mainnet instead of testnet")
+  .description("Build a machine that sells its data over MQTT with x402-mqtt")
+  .action(async (folder: string | undefined, options: { device?: string; name?: string; payout?: string; price?: string; broker?: string; mainnet?: boolean }) => {
+    await runBuildMachine(folder, options, interactiveTerminal() ? terminal : undefined);
+  });
+
+program
+  .command("check")
+  .argument("<url>", "x402 endpoint to check")
+  .option("-X, --method <method>", "HTTP method")
+  .option("-d, --data <json>", "JSON request body")
+  .description("Check an x402 endpoint is ready for buyers, for free")
+  .action(async (url: string, options: { method?: string; data?: string }) => {
+    if (!/^https?:\/\//i.test(url)) {
+      console.log(/^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?(\/|$)/i.test(url)
+        ? pc.yellow(`\nAdd the scheme: cult check ${/^localhost|^127\./i.test(url) ? "http" : "https"}://${url}\n`)
+        : pc.yellow("\nMachines are checked by their first sale: cult handshake <topic> --broker <url>\n"));
+      process.exitCode = 1;
+      return;
+    }
+    const result = await checkEndpoint(url, options);
+    console.log(pc.bold("\nCULT OS // CHECK\n"));
+    printFindings(result);
+    const ok = passed(result);
+    console.log(ok ? pc.green("\nReady for buyers.\n") : pc.red("\nNot ready yet.\n"));
+    if (!ok) process.exitCode = 1;
+  });
+
+program
+  .command("handshake")
+  .argument("<target>", "x402 endpoint URL or machine topic")
+  .option("-X, --method <method>", "HTTP method")
+  .option("-d, --data <json>", "JSON request body")
+  .option("--max <usd>", "spending cap in USD", "0.01")
+  .option("--broker <url>", "MQTT broker for a machine topic")
+  .option("--pay-to <address>", "machine payout address the receipt must pay; defaults to payout in x402-mqtt.json")
+  .option("--check", "only show whether it is listed")
+  .option("-y, --yes", "pay without asking")
+  .description("Prove a seller with one real, capped first sale")
+  .action(async (target: string, options: { method?: string; data?: string; max?: string; broker?: string; payTo?: string; check?: boolean; yes?: boolean }) => {
+    const ok = await runHandshake(target, {
+      ...options,
+      checkOnly: options.check,
+      confirm: async (question) => interactiveTerminal() ? terminal.confirm(question) : false
+    });
+    if (!ok) process.exitCode = 1;
+  });
 
 program
   .command("inspect")
@@ -383,6 +460,7 @@ program
 
     updateJob(number, update);
     printJob(number);
+    if (watched.providerMessage) console.log(`${pc.dim("PROVIDER SAYS")} ${safe(watched.providerMessage)}\n`);
     const next = watched.status === "budget_set"
       ? `Buyer: run cult fund ${number}.`
       : watched.status === "submitted"

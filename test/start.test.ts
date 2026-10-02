@@ -72,7 +72,7 @@ function installAcp(options: { agents?: boolean; signer?: boolean; authenticated
   if (active) writeFileSync(activeState, "ready", "utf8");
   executable("acp", [
     "case \"$*\" in",
-    "  --version) echo 'acp 3.0' ;;",
+    "  --version) echo '1.0.39' ;;",
     `  'agent list --json') if [ ! -f '${authState}' ]; then echo 'NOT_AUTHENTICATED: Run acp configure' >&2; exit 1; elif [ -f '${agentState}' ]; then echo '{\"data\":[{\"id\":\"agent-1\",\"name\":\"Example Agent\",\"walletAddress\":\"0x1234\"}]}' ; else echo '{\"data\":[]}' ; fi ;;`,
     `  configure) : > '${authState}' ;;`,
     `  'agent create --signer --policy restricted') : > '${agentState}'; : > '${signerState}'; : > '${activeState}' ;;`,
@@ -92,7 +92,12 @@ async function start(confirm = vi.fn(async () => true)): Promise<{ ready: boolea
     confirm,
     wait: async () => undefined,
     launch,
-    allowNonInteractive: true
+    allowNonInteractive: true,
+    asker: {
+      ask: async () => "",
+      confirm: async () => false,
+      choose: async () => 2
+    }
   });
   return { ready, launch };
 }
@@ -186,6 +191,48 @@ describe("cult start", () => {
     expect(confirm).toHaveBeenCalledWith("Sign in to ACP now?");
   });
 
+  test("offers the pinned ACP CLI over an older one", async () => {
+    installGit();
+    installGitHub();
+    installAcp();
+    const upgraded = join(directory, "acp-upgraded");
+    renameSync(join(directory, "acp"), join(directory, "acp-real"));
+    executable("acp", [
+      `if [ "$1" = "--version" ] && [ ! -f '${upgraded}' ]; then echo '1.0.33'; exit 0; fi`,
+      `exec '${join(directory, "acp-real")}' "$@"`
+    ].join("\n"));
+    executable("npm", [
+      "case \"$*\" in",
+      `  'install -g @virtuals-protocol/acp-cli@1.0.39') : > '${upgraded}' ;;`,
+      "  *) exit 1 ;;",
+      "esac"
+    ].join("\n"));
+    const confirm = vi.fn(async () => true);
+    const result = await start(confirm);
+
+    expect(result.ready).toBe(true);
+    expect(confirm).toHaveBeenCalledWith("Install the Virtuals ACP CLI 1.0.39 now?");
+  });
+
+  test("refuses to continue when the install leaves the wrong ACP CLI in PATH", async () => {
+    installGit();
+    installGitHub();
+    installAcp();
+    renameSync(join(directory, "acp"), join(directory, "acp-real"));
+    executable("acp", [
+      'if [ "$1" = "--version" ]; then echo \'1.0.33\'; exit 0; fi',
+      `exec '${join(directory, "acp-real")}' "$@"`
+    ].join("\n"));
+    executable("npm", ["exit 0"].join("\n"));
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => { lines.push(args.join(" ")); });
+    const result = await start();
+
+    expect(result.ready).toBe(false);
+    expect(result.launch).not.toHaveBeenCalled();
+    expect(lines.join("\n")).toContain("still reports 1.0.33");
+  });
+
   test("installs the ACP CLI when approved", async () => {
     installGit();
     installGitHub();
@@ -195,7 +242,7 @@ describe("cult start", () => {
     renameSync(acp, template);
     executable("npm", [
       "case \"$*\" in",
-      `  'install -g @virtuals-protocol/acp-cli') /bin/cp '${template}' '${acp}'; /bin/chmod 755 '${acp}' ;;`,
+      `  'install -g @virtuals-protocol/acp-cli@1.0.39') /bin/cp '${template}' '${acp}'; /bin/chmod 755 '${acp}' ;;`,
       "  *) exit 1 ;;",
       "esac"
     ].join("\n"));
@@ -204,7 +251,7 @@ describe("cult start", () => {
     const result = await start(confirm);
 
     expect(result.ready).toBe(true);
-    expect(confirm).toHaveBeenCalledWith("Install the Virtuals ACP CLI now?");
+    expect(confirm).toHaveBeenCalledWith("Install the Virtuals ACP CLI 1.0.39 now?");
   });
 
   test("selects an existing agent when none is active", async () => {
@@ -222,7 +269,7 @@ describe("cult start", () => {
     installGitHub();
     executable("acp", [
       "case \"$*\" in",
-      "  --version) exit 0 ;;",
+      "  --version) echo '1.0.39' ;;",
       "  'agent list --json') echo 'Service unavailable' >&2; exit 1 ;;",
       "esac"
     ].join("\n"));
@@ -253,7 +300,7 @@ describe("cult start", () => {
     const acp = join(directory, "acp");
     executable("acp", [
       "case \"$*\" in",
-      "  --version) exit 0 ;;",
+      "  --version) echo '1.0.39' ;;",
       "  'agent list --json') echo '{\"data\":[{\"id\":\"agent-1\",\"name\":\"Example Agent\",\"walletAddress\":\"0x1234\"}]}' ;;",
       "  'agent whoami --json') echo '{\"id\":\"agent-1\",\"name\":\"Example Agent\",\"walletAddress\":\"0x1234\"}' ;;",
       `  'agent signer-policy --agent-id agent-1 --json') if [ -f '${acp}.added' ]; then echo '{\"signerId\":\"local\"}'; else echo '{\"matched\":false,\"signers\":[{\"signerId\":\"remote\"}]}' ; fi ;;`,
@@ -277,7 +324,7 @@ describe("cult start", () => {
     const acp = join(directory, "acp");
     executable("acp", [
       "case \"$*\" in",
-      "  --version) exit 0 ;;",
+      "  --version) echo '1.0.39' ;;",
       "  'agent list --json') echo '{\"data\":[{\"id\":\"agent-1\",\"name\":\"Example Agent\",\"walletAddress\":\"0x1234\"}]}' ;;",
       "  'agent whoami --json') echo '{\"id\":\"agent-1\",\"name\":\"Example Agent\",\"walletAddress\":\"0x1234\"}' ;;",
       "  'agent signer-policy --agent-id agent-1 --json') echo '{\"signerId\":\"remote\",\"policy\":\"ACP_ONLY\"}' ;;",

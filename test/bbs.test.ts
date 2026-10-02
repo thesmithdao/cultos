@@ -18,7 +18,7 @@ function stripAnsi(value: string): string {
 
 describe("BBS command deck", () => {
   test("lists the operational commands", () => {
-    const screen = stripAnsi(renderDeck(0, 80));
+    const screen = [0, 16].map((selected) => stripAnsi(renderDeck(selected, 80))).join("\n");
 
     expect(screen).toContain("TERMINAL");
     expect(screen).toContain("help");
@@ -41,12 +41,16 @@ describe("BBS command deck", () => {
       "Check delivery.",
       "Release payment.",
       "Reject with receipt.",
-      "List repo jobs."
+      "List repo jobs.",
+      "Build an x402 API.",
+      "Build a machine.",
+      "Check x402 endpoint.",
+      "First capped sale."
     ]) expect(screen).toContain(description);
   });
 
   test("renders a detail screen", () => {
-    const screen = stripAnsi(renderCommand(9, 80));
+    const screen = stripAnsi(renderCommand(13, 80));
 
     expect(screen).toContain("VERIFY // MAINTAINER");
     expect(screen).toContain("cult verify <issue>");
@@ -54,7 +58,7 @@ describe("BBS command deck", () => {
   });
 
   test("renders all command screens", () => {
-    for (let index = 0; index < 13; index += 1) {
+    for (let index = 0; index < 17; index += 1) {
       const lines = stripAnsi(renderCommand(index, 80)).split("\n");
       expect(lines.every((line) => line.length === 80)).toBe(true);
     }

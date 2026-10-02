@@ -3,6 +3,8 @@ import pc from "picocolors";
 import { z } from "zod";
 import { commandExists, githubIsAuthenticated } from "./github.js";
 import { parseGitLawbRemote } from "./gitlawb.js";
+import { AWAL_VERSION } from "./handshake.js";
+import { ACP_CLI_VERSION } from "./start.js";
 
 // Matches agentValue in acp.ts: an agent name is printed to the terminal, so
 // escape sequences are rejected rather than displayed.
@@ -78,12 +80,16 @@ function acpChecks(hasAcp: boolean): Check[] {
     ];
   }
 
+  const version = spawnSync("acp", ["--version"], { encoding: "utf8" }).stdout?.match(/\d+\.\d+\.\d+/)?.[0] ?? "";
+  const cli: Check = version === ACP_CLI_VERSION
+    ? { name: "ACP CLI", ok: true, detail: version }
+    : { name: "ACP CLI", ok: false, detail: `${version || "unknown"} · tested with ${ACP_CLI_VERSION}: npm install -g @virtuals-protocol/acp-cli@${ACP_CLI_VERSION}` };
   const identity = spawnSync("acp", ["agent", "whoami", "--json"], {
     encoding: "utf8"
   });
   if (identity.status !== 0) {
     return [
-      { name: "ACP CLI", ok: true, detail: "installed" },
+      cli,
       { name: "Agent", ok: false, detail: "authentication required" },
       { name: "Signer", ok: false, detail: "unavailable" }
     ];
@@ -92,7 +98,7 @@ function acpChecks(hasAcp: boolean): Check[] {
   const agent = parsed(agentSchema, identity.stdout);
   if (!agent) {
     return [
-      { name: "ACP CLI", ok: true, detail: "installed" },
+      cli,
       { name: "Agent", ok: false, detail: "unreadable response" },
       { name: "Signer", ok: false, detail: "unavailable" }
     ];
@@ -115,7 +121,7 @@ function acpChecks(hasAcp: boolean): Check[] {
     : agent.walletAddress;
 
   return [
-    { name: "ACP CLI", ok: true, detail: "installed" },
+    cli,
     { name: "Agent", ok: true, detail: `${agent.name} ${wallet}` },
     { name: "Signer", ok: hasSigner, detail: signerDetail }
   ];
@@ -144,7 +150,12 @@ export function runDoctor(): void {
           detail: hasGitHubAuth ? "authenticated" : hasGitHub ? "authentication required" : "not installed"
         },
     ...acpChecks(hasAcp),
-    repositoryCheck()
+    repositoryCheck(),
+    {
+      name: "awal",
+      ok: true,
+      detail: commandExists("awal") ? "installed · pays HTTP handshakes" : `not installed · only needed for HTTP handshakes (npm install -g awal@${AWAL_VERSION})`
+    }
   ];
 
   console.log(pc.bold("\nCULT OS // SYSTEM CHECK\n"));

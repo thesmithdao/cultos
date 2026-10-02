@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#bdbdb7"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e4a340"/></marker>
+  </defs>
+  <rect width="960" height="480" fill="#0b0b0b"/>
+  <text x="32" y="40" fill="#e6e6e3" font-size="18" font-weight="600">Cult OS</text>
+  <text x="118" y="40" fill="#8f8f89" font-size="13">Architecture</text>
+
+  <rect x="24" y="170" width="150" height="96" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="38" y="194" fill="#e6e6e3" font-size="13" font-weight="600">you</text>
+  <text x="38" y="216" fill="#8f8f89" font-size="11">a builder or</text>
+  <text x="38" y="232" fill="#8f8f89" font-size="11">an agent, in</text>
+  <text x="38" y="248" fill="#8f8f89" font-size="11">one terminal</text>
+
+  <rect x="214" y="70" width="210" height="300" rx="6" fill="#181817" stroke="#e4a340"/>
+  <text x="228" y="94" fill="#e4a340" font-size="13" font-weight="600">cult</text>
+  <text x="228" y="126" fill="#e6e6e3" font-size="11">start</text>
+  <text x="228" y="142" fill="#8f8f89" font-size="11">asks what you build</text>
+  <text x="228" y="170" fill="#e6e6e3" font-size="11">build x402 · build machine</text>
+  <text x="228" y="186" fill="#8f8f89" font-size="11">writes a ready project</text>
+  <text x="228" y="214" fill="#e6e6e3" font-size="11">check</text>
+  <text x="228" y="230" fill="#8f8f89" font-size="11">free readiness gate</text>
+  <text x="228" y="258" fill="#e6e6e3" font-size="11">handshake</text>
+  <text x="228" y="274" fill="#8f8f89" font-size="11">first sale, capped</text>
+  <text x="228" y="302" fill="#e6e6e3" font-size="11">hire · watch · settle</text>
+  <text x="228" y="318" fill="#8f8f89" font-size="11">agent work over ACP</text>
+
+  <rect x="470" y="70" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="484" y="94" fill="#e6e6e3" font-size="13" font-weight="600">x402</text>
+  <text x="484" y="116" fill="#8f8f89" font-size="11">Coinbase's official template</text>
+
+  <rect x="470" y="150" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="484" y="174" fill="#e6e6e3" font-size="13" font-weight="600">x402-mqtt</text>
+  <text x="484" y="196" fill="#8f8f89" font-size="11">seller, broker, buyer</text>
+
+  <rect x="470" y="230" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="484" y="254" fill="#e6e6e3" font-size="13" font-weight="600">awal</text>
+  <text x="484" y="276" fill="#8f8f89" font-size="11">pays, key off this machine</text>
+
+  <rect x="470" y="310" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="484" y="334" fill="#e6e6e3" font-size="13" font-weight="600">ACP CLI</text>
+  <text x="484" y="356" fill="#8f8f89" font-size="11">Virtuals escrow jobs</text>
+
+  <rect x="726" y="70" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="740" y="94" fill="#e6e6e3" font-size="13" font-weight="600">your paid API</text>
+  <text x="740" y="116" fill="#8f8f89" font-size="11">HTTP, Base and Solana</text>
+
+  <rect x="726" y="150" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="740" y="174" fill="#e6e6e3" font-size="13" font-weight="600">your machine</text>
+  <text x="740" y="196" fill="#8f8f89" font-size="11">sells its data over MQTT</text>
+
+  <rect x="726" y="230" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="740" y="254" fill="#e6e6e3" font-size="13" font-weight="600">Base · Solana</text>
+  <text x="740" y="276" fill="#8f8f89" font-size="11">USDC to your payout</text>
+
+  <rect x="726" y="310" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="740" y="334" fill="#e6e6e3" font-size="13" font-weight="600">repo work</text>
+  <text x="740" y="356" fill="#8f8f89" font-size="11">issue in, verified PR out</text>
+
+  <rect x="726" y="398" width="210" height="62" rx="6" fill="#181817" stroke="#4b4b47"/>
+  <text x="740" y="422" fill="#e6e6e3" font-size="13" font-weight="600">marketplaces</text>
+  <text x="740" y="444" fill="#8f8f89" font-size="11">listed after the first sale</text>
+
+  <line x1="174" y1="218" x2="210" y2="218" stroke="#e4a340" stroke-width="1.5" marker-end="url(#g)"/>
+
+  <line x1="424" y1="101" x2="466" y2="101" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="424" y1="181" x2="466" y2="181" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="424" y1="261" x2="466" y2="261" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="424" y1="341" x2="466" y2="341" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <line x1="680" y1="101" x2="722" y2="101" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="680" y1="181" x2="722" y2="181" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="680" y1="261" x2="722" y2="261" stroke="#e4a340" stroke-width="1.5" marker-end="url(#g)"/>
+  <line x1="680" y1="341" x2="722" y2="341" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+  <text x="690" y="252" fill="#e4a340" font-size="10">pays</text>
+
+  <polyline points="936,261 950,261 950,429 940,429" fill="none" stroke="#bdbdb7" stroke-width="1.2" marker-end="url(#a)"/>
+</svg>

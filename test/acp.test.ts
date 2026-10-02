@@ -19,6 +19,7 @@ beforeEach(() => {
       "case \"$*\" in",
       "  *job\\ history*--job-id\\ 814*) echo '{\"jobId\":\"814\",\"chainId\":8453,\"status\":\"budget_set\",\"entries\":[{\"event\":{\"type\":\"budget.set\",\"amount\":0.01}},{\"kind\":\"message\",\"content\":\"Waiting for payment\"}]}' ; exit 0 ;;",
       "  *job\\ history*--job-id\\ 815*) echo '{\"jobId\":\"815\",\"chainId\":8453,\"status\":\"submitted\",\"entries\":[{\"event\":{\"type\":\"budget.set\",\"amount\":0.01}},{\"event\":{\"type\":\"job.submitted\",\"deliverable\":\"real-delivery-reference\"}},{\"kind\":\"message\",\"content\":\"Done\"}]}' ; exit 0 ;;",
+      "  *job\\ history*--job-id\\ 817*) echo '{\"jobId\":\"817\",\"chainId\":8453,\"status\":\"budget_set\",\"entries\":[{\"event\":{\"type\":\"job.created\",\"provider\":\"0xD494\"}},{\"from\":\"0xclient\",\"contentType\":\"text\",\"content\":\"from the buyer\"},{\"from\":\"0xd494\",\"contentType\":\"text\",\"content\":\"Not Found: install the app\"}]}' ; exit 0 ;;",
       "  *job\\ history*--job-id\\ 816*) echo '{\"jobId\":\"816\",\"chainId\":84532,\"status\":\"open\",\"entries\":[]}' ; exit 0 ;;",
       "  *job\\ history*) echo '{\"jobId\":\"813\",\"chainId\":8453,\"status\":\"open\",\"entries\":[]}' ; exit 0 ;;",
       "  *agent\\ list*) echo '{\"data\":[{\"id\":\"buyer-id\",\"name\":\"Buyer\",\"walletAddress\":\"0x1111111111111111111111111111111111111111\"},{\"id\":\"provider-id\",\"name\":\"Provider\",\"walletAddress\":\"0x2222222222222222222222222222222222222222\"}]}' ; exit 0 ;;",
@@ -85,17 +86,25 @@ describe("ACP adapter", () => {
     expect(job.deliverable).toBe("real-delivery-reference");
   });
 
+  it("surfaces the provider's latest message and never the buyer's", () => {
+    const job = watchJob("817");
+    expect(job.providerMessage).toBe("Not Found: install the app");
+  });
+
   it("rejects history from a different chain", () => {
     expect(() => watchJob("814", 1, 84532)).toThrow("different job or chain");
   });
 
   it("watches the chain the job is recorded on", () => {
     watchJob("816", undefined, 84532);
-    const invocations = readFileSync(join(directory, "acp.log"), "utf8");
-    const watch = invocations.split("\n").find((line) => line.startsWith("job watch"));
+    const invocations = readFileSync(join(directory, "acp.log"), "utf8").split("\n");
+    const watch = invocations.find((line) => line.startsWith("job watch"));
+    const history = invocations.filter((line) => line.startsWith("job history"));
 
     expect(watch).toBeDefined();
-    expect(watch).toContain("--chain-id 84532");
+    expect(watch).not.toContain("--chain-id");
+    expect(history.length).toBeGreaterThan(0);
+    expect(history.every((line) => line.includes("--chain-id 84532"))).toBe(true);
   });
 
   it("passes an optional watch timeout", () => {
