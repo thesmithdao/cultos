@@ -75,11 +75,13 @@ export function findTransaction(value: unknown): string | undefined {
   return undefined;
 }
 
-export function settlementOf(headers: Record<string, string> | undefined): { success?: boolean; transaction?: string; network?: string } | undefined {
-  const value = headers && Object.entries(headers).find(([key]) => key.toLowerCase() === "payment-response")?.[1];
-  if (!value) return undefined;
+export function settlementOf(headers: unknown): { success?: boolean; transaction?: string; network?: string } | undefined {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return undefined;
+  const value = Object.entries(headers).find(([key]) => key.toLowerCase() === "payment-response")?.[1];
+  if (typeof value !== "string" || value.length > 4096) return undefined;
   try {
     const parsed = JSON.parse(decodeBase64(value).toString("utf8")) as { success?: unknown; transaction?: unknown; network?: unknown };
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
     return {
       ...(typeof parsed.success === "boolean" ? { success: parsed.success } : {}),
       ...(typeof parsed.transaction === "string" ? { transaction: parsed.transaction } : {}),
@@ -146,6 +148,7 @@ async function rpcCall(rpc: string, method: string, params: unknown[], fetcher: 
 
 export interface SettlementReceipt {
   settled: boolean;
+  height?: bigint;
   reason?: string;
   payer?: string;
   payee?: string;
@@ -163,20 +166,21 @@ export interface AwalAddresses {
   solana?: string | undefined;
 }
 
-export function awalAddresses(): AwalAddresses {
-  const asked = spawnSync("awal", ["address", "--json"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 });
-  if (asked.status !== 0) return {};
-  let reported: unknown;
-  try {
-    reported = JSON.parse(asked.stdout.trim());
-  } catch {
-    return {};
+export function awalAddresses(networks: string[] = ["eip155:8453", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"]): AwalAddresses {
+  const wallets: AwalAddresses = {};
+  const chains = new Set(networks.map((id) => networkOf(id)?.family).filter(Boolean));
+  for (const family of chains) {
+    const chain = family === "solana" ? "solana" : "base";
+    const asked = spawnSync("awal", ["address", "--chain", chain, "--json"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 });
+    if (asked.status !== 0) continue;
+    try {
+      const reported = JSON.parse(asked.stdout.trim()) as { address?: unknown; chain?: unknown };
+      if (reported?.chain !== chain || typeof reported.address !== "string") continue;
+      if (family === "solana" && isSolanaAddress(reported.address)) wallets.solana = reported.address;
+      if (family === "evm" && isEvmAddress(reported.address)) wallets.evm = reported.address;
+    } catch {}
   }
-  const record = reported && typeof reported === "object" ? reported as Record<string, unknown> : {};
-  const named = [record.evm, record.solana, record.address, reported].filter((value): value is string => typeof value === "string");
-  const evm = named.find(isEvmAddress);
-  const solana = named.find(isSolanaAddress);
-  return { ...(evm ? { evm } : {}), ...(solana ? { solana } : {}) };
+  return wallets;
 }
 
 export const MACHINE_CONFIG = "x402-mqtt.json";
@@ -226,7 +230,7 @@ export async function confirmOnBase(
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2_000));
     const receipt = await rpcCall(BASE_RPC, "eth_getTransactionReceipt", [transaction], fetcher) as
-      { status?: unknown; logs?: unknown } | null | undefined;
+      { status?: unknown; logs?: unknown; blockNumber?: unknown } | null | undefined;
     if (!receipt) continue;
     if (receipt.status !== "0x1") return { settled: false, reason: "the transaction reverted on Base" };
 
@@ -255,6 +259,7 @@ export async function confirmOnBase(
     }
     return {
       settled: true,
+      ...(typeof receipt.blockNumber === "string" && /^0x[0-9a-fA-F]+$/.test(receipt.blockNumber) ? { height: BigInt(receipt.blockNumber) } : {}),
       payer: matched.from,
       payee: matched.to,
       amount: matched.value.toString()
@@ -310,7 +315,7 @@ export async function confirmOnSolana(
     if (status.confirmationStatus !== "confirmed" && status.confirmationStatus !== "finalized") continue;
 
     const confirmed = await rpcCall(rpc, "getTransaction", [signature, { encoding: "jsonParsed", commitment: "confirmed", maxSupportedTransactionVersion: 0 }], fetcher) as
-      { meta?: { preTokenBalances?: unknown; postTokenBalances?: unknown } } | null | undefined;
+      { slot?: unknown; meta?: { preTokenBalances?: unknown; postTokenBalances?: unknown } } | null | undefined;
     if (!confirmed?.meta) continue;
     const moves = tokenMoves(confirmed.meta.preTokenBalances, confirmed.meta.postTokenBalances, sale.mint);
     const payer = moves.find((move) => move.delta === -sale.units);
@@ -319,6 +324,7 @@ export async function confirmOnSolana(
     if (!paid) return { settled: false, reason: unmatched(sale) };
     return {
       settled: true,
+      ...(typeof confirmed.slot === "number" && Number.isSafeInteger(confirmed.slot) && confirmed.slot >= 0 ? { height: BigInt(confirmed.slot) } : {}),
       payee: sale.payTo,
       amount: sale.units.toString(),
       ...(payer ? { payer: payer.owner } : {})
@@ -389,14 +395,33 @@ async function handshakeHttp(target: string, options: HandshakeOptions): Promise
     console.log(pc.dim(`Then check the listing with: cult handshake ${safe(quote(result.url))} --check\n`));
     return false;
   }
-  const buyer = awalAddresses();
+  const buyer = awalAddresses(options402.map((accept) => accept.network));
+  if (options402.some((accept) => networkOf(accept.network)?.family === "solana" ? !buyer.solana : !buyer.evm)) {
+    console.log(pc.yellow("\nCannot read the wallet address. No payment attempted."));
+    console.log(pc.dim("Check awal status and sign in if required.\n"));
+    return false;
+  }
   const wallets = [buyer.evm, buyer.solana].filter((value): value is string => Boolean(value));
-  console.log(wallets.length > 0
-    ? `${pc.dim("pays from")}  ${wallets.map((wallet) => safe(wallet)).join("  ")}\n`
-    : pc.dim("awal did not report its own address, so the receipt's payer cannot be checked.\n"));
+  console.log(`${pc.dim("pays from")}  ${wallets.map((wallet) => safe(wallet)).join("  ")}\n`);
   if (!options.yes && !await options.confirm("Make this real payment now?")) {
     console.log(pc.dim("No payment made.\n"));
     return false;
+  }
+
+  const heights = new Map<string, bigint>();
+  for (const accept of options402) {
+    if (heights.has(accept.network)) continue;
+    const solana = networkOf(accept.network)?.family === "solana";
+    const rpc = solana ? solanaRpcFor(accept.network) : BASE_RPC;
+    const height = rpc && await rpcCall(rpc, solana ? "getSlot" : "eth_blockNumber", solana ? [{ commitment: "confirmed" }] : [], options.fetcher ?? fetch);
+    const position = solana
+      ? typeof height === "number" && Number.isSafeInteger(height) && height >= 0 ? BigInt(height) : undefined
+      : typeof height === "string" && /^0x[0-9a-fA-F]+$/.test(height) ? BigInt(height) : undefined;
+    if (position === undefined) {
+      console.log(pc.yellow("\nCannot read the chain position. No payment attempted.\n"));
+      return false;
+    }
+    heights.set(accept.network, position);
   }
 
   const args = ["x402", "pay", result.url, "-X", method, ...(options.data ? ["-d", options.data] : []), "--max-amount", cap.toString(), "--scheme", "exact", "--json"];
@@ -408,13 +433,18 @@ async function handshakeHttp(target: string, options: HandshakeOptions): Promise
   } catch {
     output = undefined;
   }
-  const record = output as { status?: number; paymentMade?: boolean; headers?: Record<string, string>; error?: { message?: string } } | undefined;
+  const record = output && typeof output === "object" && !Array.isArray(output)
+    ? output as { status?: unknown; paymentMade?: unknown; headers?: unknown; error?: { code?: unknown } }
+    : undefined;
   const settlement = settlementOf(record?.headers);
-  if (paid.status !== 0 || record?.paymentMade !== true || settlement?.success !== true || !settlement.network) {
-    const status = Number(record?.status);
-    console.log(pc.red(`\nNo payment went through${Number.isInteger(status) ? ` (HTTP ${status})` : ""}.`));
-    if (typeof record?.error?.message === "string") console.log(pc.dim(`awal: ${safe(record.error.message).slice(0, 300)}`));
-    console.log(pc.dim("If awal is not signed in, run: awal auth login you@example.com\n"));
+  if ((record?.paymentMade !== undefined && record.paymentMade !== true) || settlement?.success !== true || !settlement.network) {
+    console.log(pc.yellow("\nPayment outcome unknown. Check your wallet before paying again."));
+    if (settlement?.network && settlement.transaction) {
+      const link = explorer(settlement.network, settlement.transaction);
+      if (link) console.log(`${pc.dim("tx")}  ${link}`);
+    }
+    if (record?.error?.code === "AUTH_REQUIRED") console.log(pc.dim("awal needs authentication: awal auth login you@example.com"));
+    console.log();
     return false;
   }
   const quoted = options402.find((accept) => accept.network === settlement.network);
@@ -422,7 +452,7 @@ async function handshakeHttp(target: string, options: HandshakeOptions): Promise
     console.log(pc.red(`\nawal settled on ${safe(settlement.network)}, which is not one of the mainnet options above, so this is not a first sale.\n`));
     return false;
   }
-  const candidate = settlement.transaction ?? findTransaction(output);
+  const candidate = settlement.transaction;
   const transaction = candidate && isTransactionFor(quoted.network, candidate) ? candidate : undefined;
   if (!transaction) {
     console.log(pc.red("\nThe seller reported a payment without a settlement transaction, so there is nothing to prove it."));
@@ -442,12 +472,22 @@ async function handshakeHttp(target: string, options: HandshakeOptions): Promise
     console.log(`${pc.dim("tx")}  ${link ?? safe(transaction)}\n`);
     return false;
   }
-  const done = Number(record?.status);
-  console.log(pc.green(`\nFirst sale done on ${chain}${Number.isInteger(done) ? ` · HTTP ${done}` : ""}`));
+  const height = heights.get(quoted.network);
+  if (height === undefined || receipt.height === undefined || receipt.height <= height) {
+    console.log(pc.yellow("\nPayment not confirmed as this purchase: the receipt is missing its chain position or predates this purchase."));
+    console.log(`${pc.dim("tx")}  ${link ?? safe(transaction)}\n`);
+    return false;
+  }
+  const done = record?.status;
+  const successful = paid.status === 0 && typeof done === "number" && Number.isInteger(done) && done >= 200 && done < 300;
+  console.log(successful
+    ? pc.green(`\nFirst sale done on ${chain} · HTTP ${done}`)
+    : pc.yellow(`\nPayment confirmed on ${chain}; ${typeof done === "number" && Number.isInteger(done) ? `service returned HTTP ${done}` : "service response was not confirmed"}${paid.status !== 0 ? "; wallet command failed" : ""}.`));
   console.log(`${pc.dim("settled")}  ${formatUsdc(receipt.amount ?? quoted.amount)} USDC from ${safe(receipt.payer ?? "the buyer")} to ${safe(receipt.payee ?? quoted.payTo)}`);
   console.log(`${pc.dim("tx")}  ${link ?? safe(transaction)}`);
-  console.log(`${pc.dim("listing")}  ${await listingStatus(result.url, options.fetcher)}\n`);
-  return true;
+  if (successful) console.log(`${pc.dim("listing")}  ${await listingStatus(result.url, options.fetcher)}\n`);
+  else console.log(pc.dim("Check the service result before paying again.\n"));
+  return successful;
 }
 
 async function handshakeMqtt(topic: string, options: HandshakeOptions): Promise<boolean> {

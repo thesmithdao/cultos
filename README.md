@@ -32,6 +32,8 @@ cult handshake <url|topic>     # the first real sale, capped at $0.01
 - `cult handshake` makes one capped purchase and prints the receipt. Marketplaces list a seller after its first settlement.
 - `cult` never holds a key. HTTP first sales are paid through Coinbase's [awal](https://docs.cdp.coinbase.com/agentic-wallet/cli/quickstart) wallet, offered at the moment you need it, and machine first sales use your own small buyer wallet through x402-mqtt.
 
+HTTP handshakes verify your wallet's payment separately from the service response. If confirmation is unavailable, check your wallet before paying again.
+
 For a Solana machine:
 
 ```bash

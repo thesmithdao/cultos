@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { BASE_RPC, BASE_USDC, MACHINE_CONFIG, capUnits, configuredPayout, confirmOnBase, explorer, findTransaction, isTransactionFor, listingStatus, machineNetwork, runHandshake, salePayout } from "../src/handshake.js";
+import { BASE_RPC, BASE_USDC, MACHINE_CONFIG, capUnits, configuredPayout, confirmOnBase, explorer, findTransaction, isTransactionFor, listingStatus, machineNetwork, runHandshake, salePayout, settlementOf } from "../src/handshake.js";
 
 const payTo = "0x000000000000000000000000000000000000dEaD";
 const tx = `0x${"ab".repeat(32)}`;
@@ -42,6 +42,7 @@ const header = Buffer.from(JSON.stringify({
 const endpoint = "https://api.example.com/data";
 const saleOnBase = {
   status: "0x1",
+  blockNumber: "0x65",
   logs: [{ address: BASE_USDC, topics: [transferTopic, buyerTopic, deadTopic], data: "0x3e8" }]
 };
 
@@ -56,10 +57,13 @@ function json(result: unknown): Response {
 }
 
 function quoting(receipt: unknown = saleOnBase): typeof fetch {
-  return (async (input: RequestInfo | URL) => {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.startsWith("https://api.agentic.market")) return new Response("", { status: 404 });
-    if (url === BASE_RPC) return json(receipt);
+    if (url === BASE_RPC) {
+      const request = JSON.parse(String(init?.body)) as { method: string };
+      return json(request.method === "eth_blockNumber" ? "0x64" : receipt);
+    }
     return new Response(null, { status: 402, headers: { "PAYMENT-REQUIRED": header } });
   }) as typeof fetch;
 }
@@ -70,7 +74,7 @@ function solanaQuoting(statuses: unknown, transaction: unknown): typeof fetch {
     if (url.startsWith("https://api.agentic.market")) return new Response("", { status: 404 });
     if (url === solanaRpc) {
       const { method } = JSON.parse(String(init?.body)) as { method: string };
-      return json(method === "getSignatureStatuses" ? statuses : transaction);
+      return json(method === "getSlot" ? 100 : method === "getSignatureStatuses" ? statuses : transaction);
     }
     return new Response(null, { status: 402, headers: { "PAYMENT-REQUIRED": solanaHeader } });
   }) as typeof fetch;
@@ -108,11 +112,15 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-function fakeAwal(output: string, address?: string): string {
+function fakeAwal(output: string, address: string = JSON.stringify({ evm: machinePayout, solana: solanaBuyer }), exitCode = 0): string {
   const log = join(directory, "awal.log");
+  rmSync(log, { force: true });
   const path = join(directory, "awal");
-  const reports = address ? `echo '${address}'; exit 0` : "exit 1";
-  writeFileSync(path, `#!/bin/sh\necho "$*" >> '${log}'\nif [ "$1" = "--version" ]; then echo 2.12.1; exit 0; fi\nif [ "$1" = "address" ]; then ${reports}; fi\necho '${output}'\n`);
+  let addresses: { evm?: string; solana?: string } = {};
+  try { addresses = JSON.parse(address) as typeof addresses; } catch {}
+  const base = JSON.stringify({ address: addresses.evm, chain: "base" });
+  const solana = JSON.stringify({ address: addresses.solana, chain: "solana" });
+  writeFileSync(path, `#!/bin/sh\necho "$*" >> '${log}'\nif [ "$1" = "--version" ]; then echo 2.12.1; exit 0; fi\nif [ "$1" = "address" ]; then\ncase "$3" in\nbase) echo '${base}' ;;\nsolana) echo '${solana}' ;;\n*) echo '${address}' ;;\nesac\nexit 0\nfi\necho '${output}'\nexit ${exitCode}\n`);
   chmodSync(path, 0o755);
   process.env.PATH = `${directory}:${previousPath}`;
   return log;
@@ -176,12 +184,100 @@ describe("cult handshake", () => {
     expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(false);
   });
 
-  it("never takes the seller's PAYMENT-RESPONSE as proof that awal paid", async () => {
+  it("rejects an explicit nonpayment result", async () => {
     const forged = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453" })).toString("base64");
-    for (const claim of [{}, { paymentMade: false }]) {
+    for (const claim of [{ paymentMade: false }, { paymentMade: "true" }]) {
       fakeAwal(JSON.stringify({ status: 200, ...claim, headers: { "PAYMENT-RESPONSE": forged } }));
       expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quoting() })).toBe(false);
     }
+  });
+
+  it("confirms the observed awal response without a paymentMade field", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453", payer: machinePayout })).toString("base64");
+    const log = fakeAwal(JSON.stringify({ status: 200, statusText: "OK", data: { algorithm: "sha256", hex: "451bcbd1d7c0caba1cb632199085a7200a70d2d7e489507440ca12e902ac7913", bytes: 35 }, headers: { "PAYMENT-RESPONSE": receipt } }));
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(true);
+    const calls = readFileSync(log, "utf8");
+    expect(calls).toContain("address --chain base --json");
+    expect(calls).not.toContain("address --json");
+    expect(calls.match(/x402 pay/g)).toHaveLength(1);
+  });
+
+  it("refuses before payment when the wallet address is unavailable", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453" })).toString("base64");
+    const log = fakeAwal(JSON.stringify({ status: 200, paymentMade: true, headers: { "PAYMENT-RESPONSE": receipt } }), "{}");
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(false);
+    expect(readFileSync(log, "utf8")).not.toContain("x402 pay");
+  });
+
+  it("reports a paid service failure without denying its payment", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453" })).toString("base64");
+    fakeAwal(JSON.stringify({ status: 500, headers: { "PAYMENT-RESPONSE": receipt } }));
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(false);
+    const output = vi.mocked(console.log).mock.calls.flat().join("\n");
+    expect(output).toContain("Payment confirmed");
+    expect(output).toContain("HTTP 500");
+    expect(output).not.toContain("No payment went through");
+  });
+
+  it("reports uncertain wallet output without retrying or claiming nonpayment", async () => {
+    for (const [response, code] of [["not JSON", 0], ["null", 0], ["[]", 0], ["{}", 0], ["", 130], [JSON.stringify({ status: 200 }), 0]] as const) {
+      const log = fakeAwal(response, undefined, code);
+      expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(false);
+      expect(readFileSync(log, "utf8").match(/x402 pay/g)).toHaveLength(1);
+    }
+    const output = vi.mocked(console.log).mock.calls.flat().join("\n");
+    expect(output).toContain("Payment outcome unknown");
+    expect(output).not.toContain("No payment went through");
+  });
+
+  it("retains a confirmed payment when the wallet command exits unsuccessfully", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453" })).toString("base64");
+    fakeAwal(JSON.stringify({ status: 200, headers: { "PAYMENT-RESPONSE": receipt } }), undefined, 1);
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(false);
+    const output = vi.mocked(console.log).mock.calls.flat().join("\n");
+    expect(output).toContain("Payment confirmed");
+    expect(output).toContain("wallet command failed");
+    expect(output).toContain(tx);
+  });
+
+  it("does not accept a service body transaction as the settlement receipt", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, network: "eip155:8453" })).toString("base64");
+    fakeAwal(JSON.stringify({ status: 200, data: { transaction: tx }, headers: { "PAYMENT-RESPONSE": receipt } }));
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(false);
+  });
+
+  it("rejects malformed settlement header values safely", () => {
+    for (const value of [null, 5, [], "text", { "PAYMENT-RESPONSE": {} }, { "PAYMENT-RESPONSE": "!" }, { "PAYMENT-RESPONSE": "a".repeat(4097) }]) expect(settlementOf(value)).toBeUndefined();
+    for (const value of [null, [], "text", 42]) expect(settlementOf({ "PAYMENT-RESPONSE": Buffer.from(JSON.stringify(value)).toString("base64") })).toBeUndefined();
+  });
+
+  it("never treats a missing or malformed service status as a successful purchase", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453" })).toString("base64");
+    for (const status of [undefined, "200", null, 199, 300, 200.5]) {
+      fakeAwal(JSON.stringify({ status, headers: { "PAYMENT-RESPONSE": receipt } }));
+      expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quote })).toBe(false);
+    }
+    expect(vi.mocked(console.log).mock.calls.flat().join("\n")).not.toContain("First sale done");
+  });
+
+  it("rejects an older matching transfer as the new purchase", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453" })).toString("base64");
+    fakeAwal(JSON.stringify({ status: 200, headers: { "PAYMENT-RESPONSE": receipt } }));
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quoting({ ...saleOnBase, blockNumber: "0x64" }) })).toBe(false);
+    expect(vi.mocked(console.log).mock.calls.flat().join("\n")).toContain("predates this purchase");
+  });
+
+  it("does not confirm a matching transfer without its block position", async () => {
+    const receipt = Buffer.from(JSON.stringify({ success: true, transaction: tx, network: "eip155:8453" })).toString("base64");
+    fakeAwal(JSON.stringify({ status: 200, headers: { "PAYMENT-RESPONSE": receipt } }));
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: quoting({ status: "0x1", logs: saleOnBase.logs }) })).toBe(false);
+  });
+
+  it("refuses before payment when the chain position cannot be read", async () => {
+    const log = fakeAwal("{}");
+    const unavailable = (async (input: RequestInfo | URL) => String(input) === BASE_RPC ? json(null) : quote(input)) as typeof fetch;
+    expect(await runHandshake(endpoint, { confirm: async () => true, fetcher: unavailable })).toBe(false);
+    expect(readFileSync(log, "utf8")).not.toContain("x402 pay");
   });
 
   it("matches the HTTP receipt to the quote, not to the header", async () => {
@@ -192,6 +288,7 @@ describe("cult handshake", () => {
       { status: "0x1", logs: [{ address: BASE_USDC, topics: [transferTopic, buyerTopic, deadTopic], data: "0x1" }] },
       { status: "0x1", logs: [{ address: BASE_USDC, topics: [transferTopic, buyerTopic, elsewhere], data: "0x3e8" }] },
       { status: "0x1", logs: [] },
+      { status: "0x1", logs: [{ ...saleOnBase.logs[0], address: `0x${"ef".repeat(20)}` }] },
       { status: "0x0", logs: [] }
     ]) {
       fakeAwal(awal);
@@ -218,12 +315,14 @@ describe("cult handshake", () => {
     const awal = JSON.stringify({ status: 200, paymentMade: true, headers: { "PAYMENT-RESPONSE": receipt } });
     const balance = (owner: string, accountIndex: number, amount: string) => ({ accountIndex, mint: solanaMint, owner, uiTokenAmount: { amount } });
     const moved = {
+      slot: 101,
       meta: {
         preTokenBalances: [balance(solanaPayout, 1, "0"), balance(solanaBuyer, 2, "5000")],
         postTokenBalances: [balance(solanaPayout, 1, "1000"), balance(solanaBuyer, 2, "4000")]
       }
     };
     const short = {
+      slot: 101,
       meta: {
         preTokenBalances: [balance(solanaPayout, 1, "0"), balance(solanaBuyer, 2, "5000")],
         postTokenBalances: [balance(solanaPayout, 1, "999"), balance(solanaBuyer, 2, "4001")]
@@ -243,6 +342,8 @@ describe("cult handshake", () => {
 
     for (const [statuses, transaction] of [
       [confirmed, short],
+      [confirmed, { ...moved, slot: 100 }],
+      [confirmed, { meta: moved.meta }],
       [{ value: [{ err: { InstructionError: [0, "Custom"] }, confirmationStatus: "finalized" }], }, moved],
       [{ value: [{ err: null, confirmationStatus: "processed" }] }, moved],
       [{ value: [null] }, moved]
