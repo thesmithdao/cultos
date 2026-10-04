@@ -23,6 +23,10 @@ interface DeckCommand {
 const commands: DeckCommand[] = [
   { command: "help", phase: "GUIDE", role: "Either", description: "List CLI commands.", next: "Choose the command for the work you want to perform." },
   { command: "doctor", phase: "CHECK", role: "Maintainer", description: "Check repo + ACP.", next: "Resolve missing checks, then inspect an issue." },
+  { command: "build x402 <folder>", phase: "BUILD", role: "Builder", description: "Build an x402 API.", next: "npm install, npm start, then check it." },
+  { command: "build machine <folder>", phase: "BUILD", role: "Builder", description: "Build a machine.", next: "npm install, npm start, then make its first sale." },
+  { command: "check <url>", phase: "READY", role: "Builder", description: "Check x402 endpoint.", next: "Fix any failed check, then make the first sale." },
+  { command: "handshake <url|topic>", phase: "PROVE", role: "Builder", description: "First capped sale.", next: "Marketplaces list a seller after its first settlement." },
   { command: "inspect <issue>", phase: "PLAN", role: "Maintainer", description: "Create work contract", next: "Review the contract, then choose a provider." },
   { command: "hire <issue> --provider <address>", phase: "HIRE", role: "Maintainer", description: "Open a provider job.", next: "Watch the job for the provider quote." },
   { command: "watch <issue>", phase: "SYNC", role: "Either", description: "Read job updates.", next: "Take the action shown by the latest job event." },
@@ -38,7 +42,7 @@ const commands: DeckCommand[] = [
 
 const commandNames = new Set(commands.map((item) => item.command.split(" ")[0]));
 const hiddenCommandNames = new Set(["agent"]);
-const mutatingCommands = new Set(["hire", "fund", "message", "quote", "deliver", "settle"]);
+const mutatingCommands = new Set(["hire", "fund", "message", "quote", "deliver", "settle", "build", "handshake"]);
 
 function mutates(args: string[]): boolean {
   return mutatingCommands.has(args[0]!) || (args[0] === "agent" && args[1] === "use");
@@ -71,7 +75,7 @@ function bar(value: string, background: string, foreground: string, width: numbe
 }
 
 function header(width: number, label: string): string {
-  const left = " CULT OS / REPOSITORY WORK ";
+  const left = " CULT OS / MACHINE ECONOMY ";
   const right = ` ${label} `;
   const space = " ".repeat(Math.max(1, width - left.length - right.length));
   return `${color.panel}${color.ink}${left}${space}${color.muted}${right}${color.reset}`;
@@ -149,7 +153,10 @@ export function validateCommand(args: string[]): string | undefined {
 
 export function renderDeck(selected = 0, columns = 94, rows = 23): string {
   const width = Math.max(79, Math.min(columns, 100));
-  const list = commands.map((item, index) => {
+  const visible = Math.max(1, Math.min(commands.length, rows - 9));
+  const first = Math.min(Math.max(0, selected - visible + 1), commands.length - visible);
+  const list = commands.slice(first, first + visible).map((item, offset) => {
+    const index = first + offset;
     const cursor = index === selected ? `${color.inverse}${color.inverseInk}>${color.reset}` : " ";
     const description = fit(item.description, Math.max(8, width - 59));
     return `${cursor} ${fit(item.command, 40)} │ ${color.muted}${fit(item.phase, 8)} ${color.reset}${color.panel}${color.ink}│ ${description}`;

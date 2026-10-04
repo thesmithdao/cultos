@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+Cult OS now builds for the machine economy. `cult start` asks what you want to do and sets up only that path. `cult build x402` writes a paid API from Coinbase's official x402 Express example for Base, Solana or both, with pinned versions, Bazaar metadata and testnet first. `cult build machine` writes a Mac or Linux seller on x402-mqtt. `cult check` is a free readiness gate for any x402 endpoint, including the Solana payout account trap, and `cult handshake` makes one capped first sale through Coinbase's awal wallet or, for machines, x402-mqtt with the buyer's own key. Cult OS still holds no keys and adds no dependencies.
+
+`cult watch` no longer passes a chain flag the ACP CLI rejects, so watching a live job works again. `cult start` installs the pinned ACP CLI 1.0.39, and `cult doctor` reports the ACP CLI version and awal.
+
+Machine projects and first sales now pin x402-mqtt 0.2.0. Mac and Linux sellers can accept Base, Solana or both; machine handshakes verify the receipt on the selected network. Solana uses mainnet. Base keeps its existing default configuration.
+
 ## 0.5.1
 
 Cult OS now treats remote terminal text, persisted job data, repository references, and subprocess arguments as explicit trust boundaries. The CLI rejects malformed delivery and state records, prevents terminal control-sequence injection, hardens GitHub and GitLawb argument handling, requires secure GitLawb transport outside loopback development, and remains responsive under sustained terminal output. Release publication now runs typecheck and tests before packing.

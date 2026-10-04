@@ -2,10 +2,10 @@
 
 # CULT OS
 
-### Repository work for the agent economy.
+### Build for the machine economy.
 
-Turn GitHub or GitLawb issues into paid Virtuals ACP jobs.
-Verify the result through pull requests, CI and on-chain settlement.
+Build a paid x402 API or a machine that sells its data.
+Prove it with a first sale on Base or Solana, and hire agents for repo work through Virtuals ACP.
 
 [![X](https://img.shields.io/badge/@thecultos-000000?style=for-the-badge&logo=x&logoColor=white)](https://x.com/thecultos)
 
@@ -13,6 +13,34 @@ Verify the result through pull requests, CI and on-chain settlement.
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/thesmithdao/cultos/tree/main.svg?style=shield)](https://dl.circleci.com/status-badge/redirect/gh/thesmithdao/cultos/tree/main)
 
 </div>
+
+![architecture](docs/architecture.svg)
+
+## Build
+
+```bash
+npx @cultos/cli start          # asks what you want to build
+cult build x402                # a paid API, from Coinbase's official x402 example
+cult build machine             # a Mac or Linux server that sells its data over MQTT
+cult check <url>               # free: is it ready for buyers?
+cult handshake <url|topic>     # the first real sale, capped at $0.01
+```
+
+- `cult build x402` sells on Base, Solana or both, and starts on testnet. Set `X402_NETWORK=mainnet` and your CDP keys to go live.
+- `cult build machine` runs on [x402-mqtt 0.2.0](https://github.com/thesmithdao/x402-mqtt), with USDC on Base, Solana or both. Solana machines start on mainnet.
+- `cult check` reads the live 402 challenge: USDC, payout, price, Bazaar metadata and TLS. A Solana payout must have held USDC once, or payments to it fail, and `check` tells you.
+- `cult handshake` makes one capped purchase and prints the receipt. Marketplaces list a seller after its first settlement.
+- `cult` never holds a key. HTTP first sales are paid through Coinbase's [awal](https://docs.cdp.coinbase.com/agentic-wallet/cli/quickstart) wallet, offered at the moment you need it, and machine first sales use your own small buyer wallet through x402-mqtt.
+
+For a Solana machine:
+
+```bash
+cult build machine my-machine --device mac --network solana --payout <solana-address>
+```
+
+To accept both networks, use a Base `--payout` and add `--solana-payout <solana-address>`. Machine handshakes use the project's network by default; pass `--network solana` to buy from its Solana offer. Load the corresponding buyer key into `X402_MQTT_BUYER_KEY` and use a small spending cap. Solana payouts need an existing USDC account.
+
+## The idea
 
 ```text
 Repository Issue
@@ -26,8 +54,6 @@ Verification + Maintainer Review
 Merge and Settle
 ```
 
-## The idea
-
 Your repository already knows what needs to be built. Virtuals gives agents identity, escrow and reputation. CultOS connects the two.
 
 A maintainer opens an issue, hires an ACP provider and receives a pull request. CultOS verifies the repository and delivered commit before the job is settled.
@@ -36,7 +62,7 @@ A maintainer opens an issue, hires an ACP provider and receives a pull request. 
 
 ## Requirements
 
-CultOS requires Node.js 20+, Git and either GitHub CLI or GitLawb CLI. `cult start` detects the repository and configures the Virtuals ACP CLI when needed.
+Building needs Node.js 20.12+. Repo work also needs Git and either GitHub CLI or GitLawb CLI; `cult start` detects the repository and configures the Virtuals ACP CLI when needed.
 
 ## First transmission
 
@@ -119,7 +145,7 @@ CultOS posts the ACP job, provider, payment, pull request and commit back to the
 
 ## Release tracks
 
-Cult OS 0.5.x is the lean ACP CLI without repository memory. Users who rely on the optional Sibyl Memory commands remain on the security-maintained 0.4.x track.
+Cult OS 0.6.x adds building and proving x402 sellers on top of the lean 0.5.x ACP CLI, without repository memory. Users who rely on the optional Sibyl Memory commands remain on the security-maintained 0.4.x track.
 
 ## Requirements
 
@@ -142,8 +168,9 @@ Cult OS 0.5.x is the lean ACP CLI without repository memory. Users who rely on t
 - [x] Readable ACP errors and watch timeouts
 - [x] GitLawb repositories and signed delivery verification
 - [x] Aeon pull-request reviews
+- [x] Build x402 APIs and machines
+- [x] x402 readiness checks and first-sale handshakes
 - [ ] Compatible provider directory
-- [ ] x402 payments
 
 ## Status
 

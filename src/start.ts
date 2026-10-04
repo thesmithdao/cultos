@@ -3,7 +3,12 @@ import { createInterface } from "node:readline/promises";
 import pc from "picocolors";
 import { z } from "zod";
 import { runBbs } from "./bbs.js";
+import { runBuildMachine, runBuildX402 } from "./builder.js";
 import { parseGitLawbRemote } from "./gitlawb.js";
+import { ensureAwal } from "./handshake.js";
+import { terminal, type Asker } from "./prompt.js";
+
+export const ACP_CLI_VERSION = "1.0.39";
 
 interface CommandResult {
   status: number;
@@ -16,6 +21,7 @@ interface StartOptions {
   wait?: () => Promise<void>;
   launch?: () => void;
   allowNonInteractive?: boolean;
+  asker?: Asker;
 }
 
 const agentSchema = z.object({
@@ -64,6 +70,11 @@ function interactive(command: string, args: string[], timeout?: number): boolean
 
 function exists(command: string): boolean {
   return captured(command, ["--version"]).status === 0;
+}
+
+function acpReport(): { present: boolean; version: string | undefined } {
+  const result = captured("acp", ["--version"]);
+  return { present: result.status === 0, version: result.stdout.match(/\d+\.\d+\.\d+/)?.[0] };
 }
 
 function parseJson(value: string): unknown {
@@ -161,6 +172,22 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
   const launch = options.launch ?? runBbs;
 
   console.log(pc.bold("\nCULT OS // SUMMONING RITUAL\n"));
+  const asker = options.asker ?? terminal;
+  const goal = await asker.choose("What do you want to do?", [
+    "Build a paid x402 API",
+    "Build a machine that sells its data",
+    "Hire agents for repo work (ACP)"
+  ]);
+  if (goal === 0) {
+    await runBuildX402(undefined, {}, asker);
+    await ensureAwal((question) => asker.confirm(question));
+    return true;
+  }
+  if (goal === 1) {
+    await runBuildMachine(undefined, {}, asker);
+    return true;
+  }
+
   console.log(pc.dim("ESTABLISHING CONNECTIONS"));
 
   stage(1, "REPOSITORY");
@@ -219,10 +246,25 @@ export async function runStart(options: StartOptions = {}): Promise<boolean> {
   }
 
   stage(3, "ACP");
+  const installed = acpReport();
+  if (installed.present && installed.version !== ACP_CLI_VERSION) {
+    action(`ACP CLI ${installed.version ?? "unknown version"} installed; cult is tested with ${ACP_CLI_VERSION}`);
+    if (!await confirm(`Install the Virtuals ACP CLI ${ACP_CLI_VERSION} now?`)) return paused();
+    if (!interactive("npm", ["install", "-g", `@virtuals-protocol/acp-cli@${ACP_CLI_VERSION}`], 5 * 60_000)) {
+      return fail("ACP CLI installation failed");
+    }
+    const upgraded = acpReport();
+    if (!upgraded.present || upgraded.version !== ACP_CLI_VERSION) {
+      return fail(
+        `ACP CLI still reports ${upgraded.version ?? "no version"} after installing ${ACP_CLI_VERSION}`,
+        "Another acp may come first in PATH. Check with: which -a acp"
+      );
+    }
+  }
   if (!exists("acp")) {
     action("ACP CLI is not installed");
-    if (!await confirm("Install the Virtuals ACP CLI now?")) return paused();
-    if (!interactive("npm", ["install", "-g", "@virtuals-protocol/acp-cli"], 5 * 60_000)) {
+    if (!await confirm(`Install the Virtuals ACP CLI ${ACP_CLI_VERSION} now?`)) return paused();
+    if (!interactive("npm", ["install", "-g", `@virtuals-protocol/acp-cli@${ACP_CLI_VERSION}`], 5 * 60_000)) {
       return fail("ACP CLI installation failed");
     }
     if (!exists("acp")) return fail("ACP CLI is still unavailable after installation");
