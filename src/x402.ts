@@ -78,14 +78,22 @@ export function isEvmAddress(value: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(value) && !/^0x0{40}$/.test(value);
 }
 
-export function isSolanaAddress(value: string): boolean {
-  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value) || /^1+$/.test(value)) return false;
+function base58Bytes(value: string): number {
   let number = 0n;
   for (const char of value) number = number * 58n + BigInt(base58.indexOf(char));
   let bytes = 0;
   for (; number > 0n; number >>= 8n) bytes += 1;
-  const zeros = value.length - value.replace(/^1+/, "").length;
-  return bytes + zeros === 32;
+  return bytes + (value.length - value.replace(/^1+/, "").length);
+}
+
+export function isSolanaAddress(value: string): boolean {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value) || /^1+$/.test(value)) return false;
+  return base58Bytes(value) === 32;
+}
+
+export function isSolanaSignature(value: string): boolean {
+  if (!/^[1-9A-HJ-NP-Za-km-z]{64,88}$/.test(value) || /^1+$/.test(value)) return false;
+  return base58Bytes(value) === 64;
 }
 
 function validPayTo(network: X402Network, payTo: string): boolean {
