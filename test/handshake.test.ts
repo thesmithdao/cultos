@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { BASE_RPC, BASE_USDC, MACHINE_CONFIG, capUnits, configuredPayout, confirmOnBase, explorer, findTransaction, listingStatus, runHandshake, salePayout } from "../src/handshake.js";
+import { BASE_RPC, BASE_USDC, MACHINE_CONFIG, capUnits, configuredPayout, confirmOnBase, explorer, findTransaction, isTransactionFor, listingStatus, machineNetwork, runHandshake, salePayout } from "../src/handshake.js";
 
 const payTo = "0x000000000000000000000000000000000000dEaD";
 const tx = `0x${"ab".repeat(32)}`;
@@ -521,6 +521,27 @@ describe("cult handshake", () => {
     expect(configuredPayout(directory)).toBe(machinePayout);
     expect(salePayout(undefined, directory)).toBe(machinePayout);
     expect(salePayout(payTo, directory)).toBe(payTo);
+  });
+
+  it("agrees with itself about what a transaction looks like", () => {
+    const long = "z".repeat(88);
+    expect(isTransactionFor(solanaMainnet, long)).toBe(false);
+    expect(explorer(solanaMainnet, long)).toBeUndefined();
+    expect(isTransactionFor(solanaMainnet, signature)).toBe(true);
+    expect(explorer(solanaMainnet, signature)).toBe(`https://solscan.io/tx/${signature}`);
+    expect(isTransactionFor("eip155:8453", signature)).toBe(false);
+    expect(explorer("eip155:8453", signature)).toBeUndefined();
+    expect(explorer("eip155:1", tx)).toBeUndefined();
+  });
+
+  it("reads the machine network from the project it is run in", () => {
+    expect(machineNetwork(undefined, directory).id).toBe("eip155:8453");
+    writeFileSync(join(directory, MACHINE_CONFIG), JSON.stringify({ network: solanaMainnet, payout: solanaPayout }));
+    expect(machineNetwork(undefined, directory).id).toBe(solanaMainnet);
+    expect(machineNetwork("base", directory).id).toBe("eip155:8453");
+    writeFileSync(join(directory, MACHINE_CONFIG), JSON.stringify({ network: "eip155:84532", payout: machinePayout }));
+    expect(() => machineNetwork(undefined, directory)).toThrow("--mainnet");
+    expect(() => machineNetwork("devnet", directory)).toThrow("--network must be base or solana");
   });
 
   it("refuses a broker or topic that the paying path should not accept", async () => {

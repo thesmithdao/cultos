@@ -5,7 +5,7 @@ import pc from "picocolors";
 import { safe } from "./display.js";
 import { commandExists } from "./github.js";
 import { validBroker, X402_MQTT_VERSION, type Rail } from "./build.js";
-import { checkEndpoint, decodeBase64, formatUsdc, isEvmAddress, isLocal, isSolanaAddress, networkOf, passed, solanaRpcFor, type Accept, type CheckResult, type Finding, type TokenAccountLookup } from "./x402.js";
+import { checkEndpoint, decodeBase64, formatUsdc, isEvmAddress, isLocal, isSolanaAddress, isSolanaSignature, networkOf, passed, solanaRpcFor, type Accept, type CheckResult, type Finding, type TokenAccountLookup, type X402Network } from "./x402.js";
 
 export const AWAL_VERSION = "2.12.1";
 export const DEFAULT_CAP = "0.01";
@@ -40,10 +40,11 @@ export function printFindings(result: CheckResult): void {
 }
 
 export function explorer(networkId: string, transaction: string): string | undefined {
-  if (networkId === "eip155:8453" && /^0x[0-9a-fA-F]{64}$/.test(transaction)) return `https://basescan.org/tx/${transaction}`;
-  if (networkId === "eip155:84532" && /^0x[0-9a-fA-F]{64}$/.test(transaction)) return `https://sepolia.basescan.org/tx/${transaction}`;
-  if (networkId === "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" && /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(transaction)) return `https://solscan.io/tx/${transaction}`;
-  if (networkId === "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1" && /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(transaction)) return `https://solscan.io/tx/${transaction}?cluster=devnet`;
+  if (!isTransactionFor(networkId, transaction)) return undefined;
+  if (networkId === "eip155:8453") return `https://basescan.org/tx/${transaction}`;
+  if (networkId === "eip155:84532") return `https://sepolia.basescan.org/tx/${transaction}`;
+  if (networkId === "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") return `https://solscan.io/tx/${transaction}`;
+  if (networkId === "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1") return `https://solscan.io/tx/${transaction}?cluster=devnet`;
   return undefined;
 }
 
@@ -52,7 +53,7 @@ export function isTransactionFor(networkId: string, transaction: string): boolea
   if (!network) return false;
   return network.family === "evm"
     ? /^0x[0-9a-fA-F]{64}$/.test(transaction)
-    : /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(transaction);
+    : isSolanaSignature(transaction);
 }
 
 export function findTransaction(value: unknown): string | undefined {
@@ -189,12 +190,14 @@ function machineConfig(folder: string = process.cwd()): { network?: unknown; pay
   }
 }
 
-function machineNetwork(flag?: string) {
-  const selected = flag ?? machineConfig().network ?? "base";
+export function machineNetwork(flag?: string, folder?: string): X402Network {
   if (flag !== undefined && flag !== "base" && flag !== "solana") throw new Error("--network must be base or solana");
+  const selected = flag ?? machineConfig(folder).network ?? "base";
   const id = selected === "base" ? "eip155:8453" : selected === "solana" ? "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" : selected;
   const network = typeof id === "string" ? networkOf(id) : undefined;
-  if (!network || network.testnet) throw new Error("a machine first sale requires Base or Solana mainnet");
+  if (!network || network.testnet) {
+    throw new Error("a machine first sale has to be real, so it needs Base or Solana mainnet: rebuild with cult build machine --mainnet, or set network to eip155:8453 in x402-mqtt.json");
+  }
   return network;
 }
 
@@ -511,7 +514,7 @@ async function handshakeMqtt(topic: string, options: HandshakeOptions): Promise<
   if (receipt.amount) {
     console.log(`${pc.dim("settled")}  ${formatUsdc(receipt.amount)} USDC from ${safe(receipt.payer ?? "")} to ${safe(receipt.payee ?? "")}`);
   }
-  console.log(`${pc.dim("tx")}  ${explorer(network.id, transaction)}\n`);
+  console.log(`${pc.dim("tx")}  ${explorer(network.id, transaction) ?? safe(transaction)}\n`);
   return true;
 }
 

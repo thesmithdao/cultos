@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { checkEndpoint, decodePaymentRequired, formatUsdc, inspectAccept, passed , type TokenAccountLookup } from "../src/x402.js";
+import { checkEndpoint, decodePaymentRequired, formatUsdc, inspectAccept, isSolanaSignature, passed, type TokenAccountLookup } from "../src/x402.js";
 
 const neverCalled: TokenAccountLookup = async () => {
   throw new Error("a test reached the real Solana RPC: inject tokenAccount");
@@ -76,6 +76,17 @@ describe("cult check", () => {
   it("fails a network outside Base and Solana", async () => {
     const result = await checkEndpoint(`${origin}/other-chain`, { tokenAccount: neverCalled });
     expect(passed(result)).toBe(false);
+  });
+
+  it("accepts only a base58 signature that really decodes to 64 bytes", () => {
+    expect(isSolanaSignature("5".repeat(88))).toBe(true);
+    expect(isSolanaSignature("5".repeat(87))).toBe(true);
+    expect(isSolanaSignature("z".repeat(88))).toBe(false);
+    expect(isSolanaSignature("5".repeat(89))).toBe(false);
+    expect(isSolanaSignature("5".repeat(64))).toBe(false);
+    expect(isSolanaSignature("1".repeat(64))).toBe(false);
+    expect(isSolanaSignature(`5${"0".repeat(87)}`)).toBe(false);
+    expect(isSolanaSignature("")).toBe(false);
   });
 
   it("fails an empty or null Bazaar field", async () => {
