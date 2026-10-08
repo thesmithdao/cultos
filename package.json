@@ -1,6 +1,6 @@
 {
   "name": "@cultos/cli",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Build for the machine economy: paid x402 APIs, machines that sell their data, and agent work over ACP.",
   "type": "module",
   "bin": {
